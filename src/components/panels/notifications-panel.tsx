@@ -47,7 +47,7 @@ export function NotificationsPanel() {
     }
   }, [recipient])
 
-  useSmartPoll(fetchNotifications, 30000, { enabled: !!recipient, pauseWhenSseConnected: true })
+  useSmartPoll(fetchNotifications, 20000, { enabled: !!recipient })
 
   const markAllRead = async () => {
     if (!recipient) return

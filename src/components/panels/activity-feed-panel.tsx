@@ -110,7 +110,7 @@ export function ActivityFeedPanel() {
     fetchActivities(lastRefreshRef.current)
   }, [fetchActivities])
 
-  useSmartPoll(pollActivities, 30000, { enabled: autoRefresh, pauseWhenSseConnected: true })
+  useSmartPoll(pollActivities, 20000, { enabled: autoRefresh })
 
   // Format relative time
   const formatRelativeTime = (timestamp: number) => {

@@ -145,7 +145,7 @@ export function AgentSquadPanelPhase3() {
   }, [agents.length])
 
   // Smart polling with visibility pause
-  useSmartPoll(fetchAgents, 30000, { enabled: autoRefresh, pauseWhenSseConnected: true })
+  useSmartPoll(fetchAgents, 20000, { enabled: autoRefresh })
 
   // Update agent status
   const updateAgentStatus = async (agentName: string, status: Agent['status'], activity?: string) => {
