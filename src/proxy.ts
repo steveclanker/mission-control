@@ -125,8 +125,9 @@ export function proxy(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Page routes: redirect to login if no session
-  if (sessionToken) {
+  // Page routes: check session cookie, or allow if MC_SKIP_PAGE_AUTH is set
+  // (useful for Vercel deployments where SQLite sessions are ephemeral)
+  if (sessionToken || envFlag('MC_SKIP_PAGE_AUTH')) {
     return applySecurityHeaders(NextResponse.next())
   }
 
