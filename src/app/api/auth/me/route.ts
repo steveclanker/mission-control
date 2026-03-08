@@ -5,6 +5,31 @@ import { verifyPassword } from '@/lib/password'
 import { logger } from '@/lib/logger'
 
 export async function GET(request: Request) {
+  // When page auth is skipped (e.g. Vercel with ephemeral SQLite), return a
+  // default admin user so the client-side auth check doesn't redirect to login.
+  const skipPageAuth = (() => {
+    const raw = process.env.MC_SKIP_PAGE_AUTH
+    if (raw === undefined) return false
+    const v = String(raw).trim().toLowerCase()
+    return v === '1' || v === 'true' || v === 'yes' || v === 'on'
+  })()
+
+  if (skipPageAuth) {
+    const authUser = process.env.AUTH_USER || 'admin'
+    return NextResponse.json({
+      user: {
+        id: 1,
+        username: authUser,
+        display_name: authUser.charAt(0).toUpperCase() + authUser.slice(1),
+        role: 'admin',
+        provider: 'local',
+        email: null,
+        avatar_url: null,
+        workspace_id: 1,
+      },
+    })
+  }
+
   const auth = requireRole(request, 'viewer')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
