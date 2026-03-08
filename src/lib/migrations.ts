@@ -773,6 +773,75 @@ const migrations: Migration[] = [
       db.exec(`CREATE INDEX IF NOT EXISTS idx_token_usage_task_id ON token_usage(task_id)`)
       db.exec(`CREATE INDEX IF NOT EXISTS idx_token_usage_workspace_task_time ON token_usage(workspace_id, task_id, created_at)`)
     }
+  },
+  {
+    id: '026_task_integration',
+    up: (db) => {
+      // Add task integration fields for unified task management
+      const cols = db.prepare(`PRAGMA table_info(tasks)`).all() as Array<{ name: string }>
+      const hasCol = (name: string) => cols.some((c) => c.name === name)
+
+      if (!hasCol('source')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN source TEXT DEFAULT 'manual'`)
+      }
+      if (!hasCol('external_id')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN external_id TEXT`)
+      }
+      if (!hasCol('agent_id')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN agent_id TEXT`)
+      }
+      if (!hasCol('telegram_message_id')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN telegram_message_id INTEGER`)
+      }
+      if (!hasCol('execution_status')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN execution_status TEXT DEFAULT 'pending'`)
+      }
+      if (!hasCol('started_at')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN started_at INTEGER`)
+      }
+      if (!hasCol('completed_at')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN completed_at INTEGER`)
+      }
+      if (!hasCol('execution_details')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN execution_details TEXT`)
+      }
+
+      // Create agent performance tracking table
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS agent_metrics (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          agent_id TEXT NOT NULL,
+          date TEXT NOT NULL,
+          tasks_completed INTEGER DEFAULT 0,
+          avg_completion_time REAL,
+          success_rate REAL,
+          uptime_hours REAL,
+          workspace_id INTEGER NOT NULL,
+          created_at INTEGER DEFAULT (unixepoch())
+        )
+      `)
+
+      // Create task timing analysis table
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS task_timing (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          task_id INTEGER,
+          phase TEXT,
+          timestamp INTEGER,
+          duration_from_previous REAL,
+          workspace_id INTEGER NOT NULL,
+          FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+        )
+      `)
+
+      // Create indexes for performance
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_source ON tasks(source)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_external_id ON tasks(external_id)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_agent_id ON tasks(agent_id)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_execution_status ON tasks(execution_status)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_metrics_agent_date ON agent_metrics(agent_id, date)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_task_timing_task_phase ON task_timing(task_id, phase)`)
+    }
   }
 ]
 

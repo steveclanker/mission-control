@@ -42,6 +42,10 @@ interface GatewayMessage {
 }
 
 export function useWebSocket() {
+  // Skip WebSocket entirely if gateway is disabled
+  const gatewayHost = process.env.NEXT_PUBLIC_GATEWAY_HOST || ''
+  const isWebSocketDisabled = gatewayHost === 'disabled' || gatewayHost === ''
+  
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
   const pingIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined)
@@ -76,6 +80,19 @@ export function useWebSocket() {
     updateAgent,
     agents,
   } = useMissionControl()
+
+  // Early return with safe defaults if WebSocket is disabled
+  if (isWebSocketDisabled) {
+    log.info('WebSocket functionality disabled')
+    return {
+      isConnected: false,
+      connectionState: { isConnected: false },
+      connect: () => {},
+      disconnect: () => {},
+      reconnect: () => {},
+      sendMessage: () => {}
+    }
+  }
 
   const isNonRetryableGatewayError = useCallback((message: string): boolean => {
     const normalized = message.toLowerCase()
@@ -505,6 +522,12 @@ export function useWebSocket() {
   ])
 
   const connect = useCallback((url: string, token?: string) => {
+    // Skip connection if WebSocket is disabled
+    if (isWebSocketDisabled) {
+      log.info('WebSocket disabled - skipping connection')
+      return
+    }
+    
     const state = wsRef.current?.readyState
     if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) {
       return // Already connected or connecting
