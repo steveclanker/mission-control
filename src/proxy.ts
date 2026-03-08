@@ -104,8 +104,9 @@ export function proxy(request: NextRequest) {
     }
   }
 
-  // Allow login page, auth API, and docs without session
-  if (pathname === '/login' || pathname.startsWith('/api/auth/') || pathname === '/api/docs' || pathname === '/docs') {
+  // Allow login page, auth API, docs, and Late social API without session
+  // Late API routes handle their own auth via LATE_API_KEY
+  if (pathname === '/login' || pathname.startsWith('/api/auth/') || pathname === '/api/docs' || pathname === '/docs' || pathname.startsWith('/api/late/')) {
     return applySecurityHeaders(NextResponse.next())
   }
 
