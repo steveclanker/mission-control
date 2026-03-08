@@ -104,6 +104,13 @@ export function proxy(request: NextRequest) {
     }
   }
 
+  // When MC_SKIP_PAGE_AUTH is set, bypass all session/API-key checks.
+  // Useful for Vercel deployments where SQLite sessions are ephemeral
+  // and can't persist across serverless cold starts.
+  if (envFlag('MC_SKIP_PAGE_AUTH')) {
+    return applySecurityHeaders(NextResponse.next())
+  }
+
   // Allow login page, auth API, docs, and Late social API without session
   // Late API routes handle their own auth via LATE_API_KEY
   if (pathname === '/login' || pathname.startsWith('/api/auth/') || pathname === '/api/docs' || pathname === '/docs' || pathname.startsWith('/api/late/')) {
@@ -125,9 +132,8 @@ export function proxy(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Page routes: check session cookie, or allow if MC_SKIP_PAGE_AUTH is set
-  // (useful for Vercel deployments where SQLite sessions are ephemeral)
-  if (sessionToken || envFlag('MC_SKIP_PAGE_AUTH')) {
+  // Page routes: redirect to login if no session
+  if (sessionToken) {
     return applySecurityHeaders(NextResponse.next())
   }
 
