@@ -273,6 +273,24 @@ export function getUserFromRequest(request: Request): User | null {
   // Extract agent identity header (optional, for attribution)
   const agentName = (request.headers.get('x-agent-name') || '').trim() || null
 
+  // When MC_SKIP_PAGE_AUTH is set, bypass all auth and return a synthetic
+  // admin user. This is needed for Vercel deployments where SQLite sessions
+  // are ephemeral and can't persist across serverless cold starts.
+  if (skipPageAuthEnabled()) {
+    const authUser = process.env.AUTH_USER || 'admin'
+    return {
+      id: 1,
+      username: authUser,
+      display_name: authUser.charAt(0).toUpperCase() + authUser.slice(1),
+      role: 'admin',
+      workspace_id: getDefaultWorkspaceId(),
+      created_at: 0,
+      updated_at: 0,
+      last_login_at: null,
+      agent_name: agentName,
+    }
+  }
+
   // Check session cookie
   const cookieHeader = request.headers.get('cookie') || ''
   const sessionToken = parseCookie(cookieHeader, 'mc-session')
@@ -299,6 +317,13 @@ export function getUserFromRequest(request: Request): User | null {
   }
 
   return null
+}
+
+function skipPageAuthEnabled(): boolean {
+  const raw = process.env.MC_SKIP_PAGE_AUTH
+  if (raw === undefined) return false
+  const v = String(raw).trim().toLowerCase()
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on'
 }
 
 function extractApiKeyFromHeaders(headers: Headers): string | null {
