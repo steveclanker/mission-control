@@ -17,6 +17,8 @@ export type EventType =
   | 'task.updated'
   | 'task.deleted'
   | 'task.status_changed'
+  | 'task.imported'
+  | 'task.execution_updated'
   | 'chat.message'
   | 'chat.message.deleted'
   | 'notification.created'
