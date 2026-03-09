@@ -1,8 +1,18 @@
 import { NextResponse } from 'next/server'
+import { getCached, setCache } from '../cache'
 
 const LATE_API_BASE = 'https://getlate.dev/api/v1'
+const CACHE_KEY = 'late:accounts'
 
 export async function GET() {
+  // Check cache first
+  const cached = getCached<{ accounts: unknown[] }>(CACHE_KEY)
+  if (cached) {
+    return NextResponse.json(cached, {
+      headers: { 'X-Cache': 'HIT' },
+    })
+  }
+
   const apiKey = process.env.LATE_API_KEY
   if (!apiKey) {
     return NextResponse.json({ error: 'LATE_API_KEY not configured' }, { status: 500 })
@@ -25,7 +35,6 @@ export async function GET() {
 
     const data = await response.json()
     const raw = data.data || data
-    // Sanitize accounts — strip nested objects that could crash React
     const accounts = (raw.accounts || []).map((acc: Record<string, unknown>) => ({
       _id: acc._id,
       platform: acc.platform || 'instagram',
@@ -38,7 +47,13 @@ export async function GET() {
       profilePicture: acc.profilePicture || null,
       profileUrl: acc.profileUrl || null,
     }))
-    return NextResponse.json({ accounts })
+
+    const result = { accounts }
+    setCache(CACHE_KEY, result)
+
+    return NextResponse.json(result, {
+      headers: { 'X-Cache': 'MISS' },
+    })
   } catch (error) {
     console.error('Late API accounts error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
