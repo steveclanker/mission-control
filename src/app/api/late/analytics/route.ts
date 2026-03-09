@@ -17,15 +17,17 @@ export async function GET() {
     })
 
     if (!response.ok) {
+      const text = await response.text()
+      console.error('Late API error:', response.status, text)
       return NextResponse.json(
-        { error: 'Failed to fetch analytics from Late API' },
+        { error: `Late API error: ${response.status}` },
         { status: response.status }
       )
     }
 
     const data = await response.json()
-    // Late API wraps responses in { data: {...} }, so unwrap it
-    return NextResponse.json(data.data || data)
+    // Late API already includes platformPostUrl, thumbnailUrl, mediaItems in analytics posts
+    return NextResponse.json(data)
   } catch (error) {
     console.error('Late API analytics error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

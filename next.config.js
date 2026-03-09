@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  // output: 'standalone',
   turbopack: {},
   // Transpile ESM-only packages so they resolve correctly in all environments
   transpilePackages: ['react-markdown', 'remark-gfm'],
@@ -13,8 +13,8 @@ const nextConfig = {
       `default-src 'self'`,
       `script-src 'self' 'unsafe-inline'${googleEnabled ? ' https://accounts.google.com' : ''}`,
       `style-src 'self' 'unsafe-inline'`,
-      `connect-src 'self' ws: wss: http://127.0.0.1:* http://localhost:*`,
-      `img-src 'self' data: blob:${googleEnabled ? ' https://*.googleusercontent.com https://lh3.googleusercontent.com' : ''}`,
+      `connect-src 'self' ws: wss: http://127.0.0.1:* http://localhost:* https://getlate.dev https://*.getlate.dev https://*.trycloudflare.com`,
+      `img-src 'self' data: blob: https://*.cdninstagram.com https://media.getlate.dev https://*.getlate.dev${googleEnabled ? ' https://*.googleusercontent.com https://lh3.googleusercontent.com' : ''}`,
       `font-src 'self' data:`,
       `frame-src 'self'${googleEnabled ? ' https://accounts.google.com' : ''}`,
     ].join('; ')

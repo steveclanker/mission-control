@@ -37,6 +37,13 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    id: 'channels',
+    label: 'CHANNELS',
+    items: [
+      { id: 'social', label: 'Social', icon: <SocialIcon />, priority: true },
+    ],
+  },
+  {
     id: 'automate',
     label: 'AUTOMATE',
     items: [
@@ -469,6 +476,17 @@ function AlertIcon() {
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M6 13h4M3.5 10c0-1-1-2-1-4a5.5 5.5 0 0111 0c0 2-1 3-1 4H3.5z" />
       <path d="M8 1v1" />
+    </svg>
+  )
+}
+
+function SocialIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+      <path d="M2 11l3-4 3 3 2.5-3L14 11" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="4" r="2" />
+      <circle cx="4" cy="4" r="2" />
+      <circle cx="8" cy="6" r="2" />
     </svg>
   )
 }

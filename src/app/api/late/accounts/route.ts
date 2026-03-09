@@ -24,8 +24,21 @@ export async function GET() {
     }
 
     const data = await response.json()
-    // Late API wraps responses in { data: {...} }, so unwrap it
-    return NextResponse.json(data.data || data)
+    const raw = data.data || data
+    // Sanitize accounts — strip nested objects that could crash React
+    const accounts = (raw.accounts || []).map((acc: Record<string, unknown>) => ({
+      _id: acc._id,
+      platform: acc.platform || 'instagram',
+      displayName: acc.displayName || '',
+      username: acc.username || '',
+      followersCount: acc.followersCount || 0,
+      externalPostCount: acc.externalPostCount || 0,
+      isActive: acc.isActive ?? true,
+      analyticsLastSyncedAt: acc.analyticsLastSyncedAt || null,
+      profilePicture: acc.profilePicture || null,
+      profileUrl: acc.profileUrl || null,
+    }))
+    return NextResponse.json({ accounts })
   } catch (error) {
     console.error('Late API accounts error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

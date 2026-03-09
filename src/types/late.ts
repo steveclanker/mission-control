@@ -23,6 +23,7 @@ export interface LateMediaItem {
   filename: string
   size: number
   mimeType: string
+  _id?: string
 }
 
 export interface LatePost {
@@ -45,11 +46,27 @@ export interface LatePostAnalytics {
   engagementRate: number
 }
 
+export interface LatePlatformInfo {
+  platform: string
+  status: string
+  accountId: string
+  accountUsername: string
+  analytics?: LatePostAnalytics
+}
+
 export interface LateAnalyticsPost {
+  _id: string
   content: string
   publishedAt: string
   status: string
   analytics: LatePostAnalytics
+  platformPostUrl?: string
+  thumbnailUrl?: string
+  mediaType?: string
+  mediaItems?: LateMediaItem[]
+  platforms?: LatePlatformInfo[]
+  platform?: string
+  isExternal?: boolean
 }
 
 export interface LateAnalyticsOverview {
