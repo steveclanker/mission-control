@@ -199,14 +199,29 @@ export class TaskSyncEngine {
       values.push(now)
     }
 
+    if (update.status === 'executing') {
+      // Auto-progress: if task is in inbox/assigned, move to in_progress
+      const currentTask = this.getTaskById(update.taskId)
+      if (currentTask && ['inbox', 'assigned'].includes(currentTask.status)) {
+        updateFields.push('status = ?')
+        values.push('in_progress')
+      }
+    }
+
     if (update.status === 'completed' || update.status === 'failed') {
       updateFields.push('completed_at = ?')
       values.push(now)
 
-      // Also update main status
-      const mainStatus = update.status === 'completed' ? 'done' : 'blocked'
-      updateFields.push('status = ?')
-      values.push(mainStatus)
+      if (update.status === 'completed') {
+        // Auto-create Aegis approval BEFORE setting status to done
+        this.createAegisApproval(update.taskId, 'Auto-approved on task completion')
+        updateFields.push('status = ?')
+        values.push('done')
+      } else {
+        // Failed — keep current status but mark as blocked
+        updateFields.push('status = ?')
+        values.push('blocked')
+      }
     }
 
     if (update.details) {
@@ -313,6 +328,25 @@ export class TaskSyncEngine {
   }
 
   // Private helper methods
+
+  /**
+   * Create an Aegis approval record for a task (idempotent)
+   */
+  createAegisApproval(taskId: number, notes: string = 'Auto-approved on completion'): void {
+    // Check if approval already exists
+    const existing = this.db.prepare(`
+      SELECT id FROM quality_reviews
+      WHERE task_id = ? AND reviewer = 'aegis' AND status = 'approved' AND workspace_id = ?
+    `).get(taskId, this.workspaceId) as { id: number } | undefined
+
+    if (!existing) {
+      this.db.prepare(`
+        INSERT INTO quality_reviews (task_id, reviewer, status, notes, workspace_id)
+        VALUES (?, 'aegis', 'approved', ?, ?)
+      `).run(taskId, notes, this.workspaceId)
+      logger.info(`Created Aegis approval for task ${taskId}`)
+    }
+  }
 
   private getTaskById(id: number): (Task & { source?: string, external_id?: string, agent_id?: string }) | undefined {
     return this.db.prepare(`

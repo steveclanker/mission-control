@@ -98,12 +98,21 @@ function timeAgo(ts: number): string {
   return `${Math.floor(diff / 86400)}d ago`
 }
 
+interface SimpleChatMessage {
+  id: number
+  sender: string
+  content: string
+  channel: string
+  metadata: any
+  created_at: number
+}
+
 export function AgentCommsPanel() {
   const [data, setData] = useState<CommsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<string>('all')
-  const [view, setView] = useState<'chat' | 'graph'>('chat')
+  const [view, setView] = useState<'general' | 'chat' | 'graph'>('general')
   const [agentOptions, setAgentOptions] = useState<AgentOption[]>([])
   const [fromAgent, setFromAgent] = useState('')
   const [toAgent, setToAgent] = useState('')
@@ -113,6 +122,12 @@ export function AgentCommsPanel() {
   const [composerMode, setComposerMode] = useState<'coordinator' | 'agent'>('coordinator')
   const { currentUser } = useMissionControl()
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  
+  // Simple chat state
+  const [simpleMessages, setSimpleMessages] = useState<SimpleChatMessage[]>([])
+  const [simpleDraft, setSimpleDraft] = useState('')
+  const [simpleSending, setSimpleSending] = useState(false)
+  const simpleEndRef = useRef<HTMLDivElement>(null)
 
   const fetchComms = useCallback(async () => {
     try {
@@ -145,6 +160,55 @@ export function AgentCommsPanel() {
       // noop
     }
   }, 60000)
+
+  // Simple chat polling
+  const fetchSimpleChat = useCallback(async () => {
+    try {
+      const res = await fetch('/api/chat/simple?channel=general&limit=50')
+      if (!res.ok) return
+      const json = await res.json()
+      setSimpleMessages(json.messages || [])
+    } catch {
+      // silent
+    }
+  }, [])
+
+  useSmartPoll(fetchSimpleChat, 3000, { enabled: view === 'general' })
+
+  useEffect(() => {
+    if (view === 'general') fetchSimpleChat()
+  }, [view, fetchSimpleChat])
+
+  useEffect(() => {
+    if (view === 'general' && simpleEndRef.current) {
+      // Scroll within the chat container only, not the page
+      const container = simpleEndRef.current.closest('[data-chat-scroll]')
+      if (container) {
+        container.scrollTop = container.scrollHeight
+      }
+    }
+  }, [simpleMessages, view])
+
+  async function sendSimpleMessage() {
+    const content = simpleDraft.trim()
+    if (!content || simpleSending) return
+    const sender = currentUser?.username || currentUser?.display_name || 'jad'
+    setSimpleSending(true)
+    try {
+      const res = await fetch('/api/chat/simple', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sender, content, channel: 'general' }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      setSimpleDraft('')
+      await fetchSimpleChat()
+    } catch {
+      // silent
+    } finally {
+      setSimpleSending(false)
+    }
+  }
 
   const sourceMode = data?.source?.mode || "empty"
   const agents = data?.graph.agentStats.map(s => s.agent) || []
@@ -265,12 +329,20 @@ export function AgentCommsPanel() {
           {/* View toggle */}
           <div className="flex bg-surface-1 rounded-lg p-0.5 border border-border/50">
             <button
+              onClick={() => setView('general')}
+              className={`px-2.5 py-1 text-[11px] rounded-md transition-smooth ${
+                view === 'general' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              General
+            </button>
+            <button
               onClick={() => setView('chat')}
               className={`px-2.5 py-1 text-[11px] rounded-md transition-smooth ${
                 view === 'chat' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Chat
+              A2A
             </button>
             <button
               onClick={() => setView('graph')}
@@ -304,7 +376,9 @@ export function AgentCommsPanel() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        {view === 'graph' ? (
+        {view === 'general' ? (
+          <GeneralChatView messages={simpleMessages} endRef={simpleEndRef} />
+        ) : view === 'graph' ? (
           <div className="p-4">
             <CommGraph edges={data?.graph.edges || []} agentStats={data?.graph.agentStats || []} />
           </div>
@@ -338,6 +412,32 @@ export function AgentCommsPanel() {
       )}
 
       {/* Interactive composer */}
+      {view === 'general' ? (
+        <div className="border-t border-border/40 p-3 md:p-4 bg-surface-1/60 flex-shrink-0">
+          <div className="flex items-end gap-2">
+            <textarea
+              value={simpleDraft}
+              onChange={(e) => setSimpleDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  sendSimpleMessage()
+                }
+              }}
+              placeholder="Message #general... (Enter to send)"
+              className="flex-1 resize-none bg-card border border-border/50 rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/50"
+              rows={2}
+            />
+            <button
+              onClick={sendSimpleMessage}
+              disabled={simpleSending || !simpleDraft.trim()}
+              className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {simpleSending ? '...' : 'Send'}
+            </button>
+          </div>
+        </div>
+      ) : (
       <div className="border-t border-border/40 p-3 md:p-4 bg-surface-1/60 flex-shrink-0">
         <div className="flex items-center gap-2 mb-2">
           <div className="flex bg-surface-1 rounded-lg p-0.5 border border-border/50">
@@ -428,6 +528,74 @@ export function AgentCommsPanel() {
           <div className="mt-2 text-[11px] text-red-400">{sendError}</div>
         )}
       </div>
+      )}
+    </div>
+  )
+}
+
+// ── General Chat View (simple chat_messages) ──
+
+const SENDER_COLORS: Record<string, string> = {
+  jad: '#a78bfa',
+  iris: '#818cf8',
+  system: '#9ca3af',
+}
+
+function getSenderColor(name: string): string {
+  return SENDER_COLORS[name.toLowerCase()] || '#60a5fa'
+}
+
+function GeneralChatView({ messages, endRef }: { messages: SimpleChatMessage[]; endRef: React.RefObject<HTMLDivElement | null> }) {
+  if (messages.length === 0) return <EmptyState />
+
+  return (
+    <div className="px-2 md:px-4 py-3 space-y-1">
+      {messages.map((msg, i) => {
+        const prev = i > 0 ? messages[i - 1] : null
+        const sameSender = prev?.sender === msg.sender
+        const closeInTime = prev && (msg.created_at - prev.created_at) < 180
+        const collapse = sameSender && closeInTime
+        const color = getSenderColor(msg.sender)
+
+        return (
+          <div
+            key={msg.id}
+            className={`group flex gap-2.5 px-2 py-0.5 rounded-lg hover:bg-surface-1/50 transition-smooth ${collapse ? '' : 'mt-3'}`}
+          >
+            <div className="w-9 flex-shrink-0">
+              {!collapse && (
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold"
+                  style={{ backgroundColor: color + '20', color }}
+                >
+                  {msg.sender.charAt(0).toUpperCase()}
+                </div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              {!collapse && (
+                <div className="flex items-baseline gap-1.5 mb-0.5">
+                  <span className="text-[13px] font-semibold" style={{ color }}>
+                    {msg.sender}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/40 tabular-nums">
+                    {formatTime(msg.created_at)}
+                  </span>
+                </div>
+              )}
+              <div className="text-[13px] text-foreground/90 leading-[1.45] break-words whitespace-pre-wrap">
+                {msg.content}
+              </div>
+            </div>
+            {collapse && (
+              <span className="text-[10px] text-muted-foreground/0 group-hover:text-muted-foreground/40 tabular-nums self-center transition-smooth flex-shrink-0">
+                {formatTime(msg.created_at)}
+              </span>
+            )}
+          </div>
+        )
+      })}
+      <div ref={endRef} />
     </div>
   )
 }

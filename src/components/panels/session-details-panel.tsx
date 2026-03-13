@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, lazy, Suspense } from 'react'
 import { useMissionControl } from '@/store'
 import { useSmartPoll } from '@/lib/use-smart-poll'
 import { createClientLogger } from '@/lib/client-logger'
+
+const SessionTranscriptViewer = lazy(() => import('./session-transcript-viewer').then(m => ({ default: m.SessionTranscriptViewer })))
 
 const log = createClientLogger('SessionDetails')
 
@@ -403,6 +405,14 @@ export function SessionDetailsPanel() {
                           >
                             {controllingSession === `terminate-${session.id}` ? 'Working...' : 'Terminate'}
                           </button>
+                        </div>
+
+                        {/* Transcript Viewer */}
+                        <div>
+                          <h4 className="font-medium text-foreground mb-2">Session Transcript</h4>
+                          <Suspense fallback={<div className="text-sm text-muted-foreground">Loading transcript...</div>}>
+                            <SessionTranscriptViewer sessionId={session.id} />
+                          </Suspense>
                         </div>
                       </div>
                     )}

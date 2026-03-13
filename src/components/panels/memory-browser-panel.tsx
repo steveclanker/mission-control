@@ -1,10 +1,12 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { useMissionControl } from '@/store'
 import { createClientLogger } from '@/lib/client-logger'
 
 const log = createClientLogger('MemoryBrowser')
+
+const MemoryGraphView = lazy(() => import('./memory-graph-view').then(m => ({ default: m.MemoryGraphView })))
 
 interface MemoryFile {
   path: string
@@ -37,7 +39,7 @@ export function MemoryBrowserPanel() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<'daily' | 'knowledge' | 'all'>('all')
+  const [activeTab, setActiveTab] = useState<'daily' | 'knowledge' | 'all' | 'graph'>('all')
 
   const loadFileTree = useCallback(async () => {
     setIsLoading(true)
@@ -405,11 +407,28 @@ export function MemoryBrowserPanel() {
           >
             🧠 Knowledge
           </button>
+          <button
+            onClick={() => setActiveTab('graph')}
+            className={`px-4 py-2 rounded font-medium transition-colors ${
+              activeTab === 'graph' 
+                ? 'bg-primary text-primary-foreground' 
+                : 'bg-secondary text-foreground hover:bg-secondary/80'
+            }`}
+          >
+            🕸️ Graph View
+          </button>
         </div>
       </div>
 
+      {/* Graph View */}
+      {activeTab === 'graph' && (
+        <Suspense fallback={<div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>}>
+          <MemoryGraphView onSelectFile={(path) => { loadFileContent(path); setActiveTab('all') }} />
+        </Suspense>
+      )}
+
       {/* Search Bar */}
-      <div className="bg-card border border-border rounded-lg p-4">
+      {activeTab !== 'graph' && <div className="bg-card border border-border rounded-lg p-4">
         <div className="flex space-x-4">
           <div className="flex-1">
             <input
@@ -460,9 +479,9 @@ export function MemoryBrowserPanel() {
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      {activeTab !== 'graph' && <div className="grid lg:grid-cols-3 gap-6">
         {/* File Tree */}
         <div className="bg-card border border-border rounded-lg p-6">
           <h2 className="text-xl font-semibold mb-4">Memory Structure</h2>
@@ -607,7 +626,7 @@ export function MemoryBrowserPanel() {
             )}
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* File Stats */}
       {memoryFiles.length > 0 && (

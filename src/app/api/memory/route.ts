@@ -280,7 +280,34 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+    // Default: return tree view when no action specified
+    if (!MEMORY_PATH) {
+      return NextResponse.json({ tree: [] })
+    }
+    if (MEMORY_ALLOWED_PREFIXES.length) {
+      const tree: MemoryFile[] = []
+      for (const prefix of MEMORY_ALLOWED_PREFIXES) {
+        const folder = prefix.replace(/\/$/, '')
+        const fullPath = join(MEMORY_PATH, folder)
+        if (!existsSync(fullPath)) continue
+        try {
+          const stats = await stat(fullPath)
+          if (!stats.isDirectory()) continue
+          tree.push({
+            path: folder,
+            name: folder,
+            type: 'directory',
+            modified: stats.mtime.getTime(),
+            children: await buildFileTree(fullPath, folder),
+          })
+        } catch {
+          // Skip unreadable roots
+        }
+      }
+      return NextResponse.json({ tree })
+    }
+    const tree = await buildFileTree(MEMORY_PATH)
+    return NextResponse.json({ tree })
   } catch (error) {
     logger.error({ err: error }, 'Memory API error')
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -53,6 +53,11 @@ export function SocialMediaPanel() {
   const [calendarComposeDay, setCalendarComposeDay] = useState<number | null>(null)
   const [calendarTime, setCalendarTime] = useState('09:00')
 
+  // Calendar media state
+  const [calendarMediaFiles, setCalendarMediaFiles] = useState<File[]>([])
+  const [calendarMediaPreviews, setCalendarMediaPreviews] = useState<string[]>([])
+  const [uploadingMedia, setUploadingMedia] = useState(false)
+
   // Analytics sort state
   const [sortKey, setSortKey] = useState<SortKey>('engagementRate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
@@ -78,6 +83,12 @@ export function SocialMediaPanel() {
   }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  // Clear media state when calendar compose day changes
+  useEffect(() => {
+    setCalendarMediaFiles([])
+    setCalendarMediaPreviews([])
+  }, [calendarComposeDay])
 
   // Auto-refresh every 5 minutes for real-time updates
   useEffect(() => {
@@ -343,14 +354,40 @@ export function SocialMediaPanel() {
     if (!composeText.trim() || selectedPlatforms.length === 0) return
     setPosting(true); setPostSuccess(null); setError(null)
     try {
-      const body: { text: string; platforms: string[]; scheduledFor?: string } = { text: composeText, platforms: selectedPlatforms }
+      // Upload any local media files first
+      const mediaUrls: string[] = []
+      if (calendarMediaFiles.length > 0) {
+        setUploadingMedia(true)
+        for (let i = 0; i < calendarMediaFiles.length; i++) {
+          const file = calendarMediaFiles[i]
+          if (file.size > 0) {
+            const formData = new FormData()
+            formData.append('file', file)
+            const uploadRes = await fetch('/api/late/media', { method: 'POST', body: formData })
+            if (uploadRes.ok) {
+              const data = await uploadRes.json()
+              mediaUrls.push(data.url)
+            }
+          } else {
+            // URL-based media
+            mediaUrls.push(calendarMediaPreviews[i])
+          }
+        }
+        setUploadingMedia(false)
+      }
+
+      const body: Record<string, unknown> = { text: composeText, platforms: selectedPlatforms }
       if (scheduleMode === 'schedule' && scheduledFor) body.scheduledFor = new Date(scheduledFor).toISOString()
+      if (mediaUrls.length > 0) body.mediaUrls = mediaUrls
+
       const res = await fetch('/api/late/posts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (!res.ok) throw new Error('Failed to create post')
       setPostSuccess(scheduleMode === 'now' ? 'Published!' : 'Scheduled!')
-      setComposeText(''); setSelectedPlatforms([]); setScheduledFor(''); fetchData()
+      setComposeText(''); setSelectedPlatforms([]); setScheduledFor('')
+      setCalendarMediaFiles([]); setCalendarMediaPreviews([])
+      fetchData()
     } catch (err) { setError(err instanceof Error ? err.message : 'Failed to create post') }
-    finally { setPosting(false) }
+    finally { setPosting(false); setUploadingMedia(false) }
   }
 
   const togglePlatform = (platform: string) => {
@@ -371,7 +408,7 @@ export function SocialMediaPanel() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-5 border-b border-border flex-shrink-0">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-3 md:p-5 border-b border-border flex-shrink-0">
         <div>
           <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">Social Media</h2>
           <p className="text-xs text-muted-foreground mt-1">Powered by Late API · {accounts.length} account{accounts.length !== 1 ? 's' : ''} connected · Updated {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
@@ -381,11 +418,11 @@ export function SocialMediaPanel() {
         </button>
       </div>
 
-      <div className="border-b border-border flex-shrink-0 overflow-x-auto">
-        <div className="flex gap-1 px-4 py-2">
+      <div className="border-b border-border flex-shrink-0 overflow-x-auto scrollbar-none">
+        <div className="flex gap-1 px-3 md:px-4 py-2 min-w-max">
           {tabs.map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id as TabId)}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 whitespace-nowrap ${
+              className={`px-3 md:px-4 py-2 text-xs md:text-sm font-medium rounded-lg transition-all duration-200 whitespace-nowrap min-h-[40px] ${
                 activeTab === tab.id
                   ? 'bg-gradient-to-r from-violet-500/15 to-pink-500/15 text-foreground border border-violet-500/20 shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-white/5'
@@ -405,7 +442,7 @@ export function SocialMediaPanel() {
         <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3 mx-4 mt-4 rounded-xl text-sm">✅ {postSuccess}</div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-5">
+      <div className="flex-1 overflow-y-auto p-3 md:p-5">
         {loading && !analytics ? (
           <div className="flex flex-col items-center justify-center h-32 gap-3">
             <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
@@ -416,7 +453,7 @@ export function SocialMediaPanel() {
             {/* ═══════════════ OVERVIEW TAB ═══════════════ */}
             {activeTab === 'overview' && (
               <div className="space-y-6">
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
                   <StatCard label="Total Posts" value={String(analytics?.overview?.totalPosts || 0)} icon="📝" gradient="from-violet-500/20 to-purple-500/5" borderColor="border-violet-500/20" />
                   <StatCard label="Followers" value={formatNumber(totalFollowers)} icon="👥" gradient="from-cyan-500/20 to-blue-500/5" borderColor="border-cyan-500/20" />
                   <StatCard label="Avg Engagement" value={`${avgEngagementRate.toFixed(2)}%`} icon="🔥" gradient="from-orange-500/20 to-red-500/5" borderColor="border-orange-500/20" />
@@ -467,8 +504,8 @@ export function SocialMediaPanel() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="bg-card border border-border rounded-xl p-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-5">
+                  <div className="bg-card border border-border rounded-xl p-3 md:p-5">
                     <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-cyan-500" /> Connected Accounts
                     </h3>
@@ -492,11 +529,11 @@ export function SocialMediaPanel() {
                       </div>
                     )}
                   </div>
-                  <div className="bg-card border border-border rounded-xl p-5">
+                  <div className="bg-card border border-border rounded-xl p-3 md:p-5">
                     <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-pink-500" /> Engagement Summary
                     </h3>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
                       <MiniStat label="Total Likes" value={formatNumber(analytics?.posts?.reduce((s, p) => s + (p.analytics?.likes || 0), 0) || 0)} color="text-pink-400" />
                       <MiniStat label="Total Comments" value={formatNumber(analytics?.posts?.reduce((s, p) => s + (p.analytics?.comments || 0), 0) || 0)} color="text-blue-400" />
                       <MiniStat label="Total Shares" value={formatNumber(analytics?.posts?.reduce((s, p) => s + (p.analytics?.shares || 0), 0) || 0)} color="text-cyan-400" />
@@ -543,26 +580,196 @@ export function SocialMediaPanel() {
                 </div>
 
                 {calendarComposeDay !== null && (
-                  <div className="bg-card border border-violet-500/20 rounded-xl p-5 space-y-3">
+                  <div className="bg-card border border-violet-500/20 rounded-xl p-5 space-y-4">
                     <h4 className="text-sm font-semibold text-foreground">
                       {calendarMonth.toLocaleDateString('en-US', { month: 'long' })} {calendarComposeDay} — {postsForDay(calendarComposeDay).length} post(s)
                     </h4>
+
                     {postsForDay(calendarComposeDay).map((post, i) => (
                       <div key={i} className="text-xs text-muted-foreground bg-secondary/30 p-2 rounded-lg truncate">{post.content || 'No caption'}</div>
                     ))}
-                    <textarea value={composeText} onChange={e => setComposeText(e.target.value)} placeholder="Write a post for this day..." className="w-full h-20 bg-secondary/50 text-foreground rounded-xl p-3 border border-border text-sm resize-none focus:outline-none focus:ring-1 focus:ring-violet-500/50" />
-                    <div className="flex items-center gap-3">
-                      <input type="time" value={calendarTime} onChange={e => setCalendarTime(e.target.value)} className="bg-secondary/50 text-foreground rounded-lg px-3 py-1.5 border border-border text-sm" />
-                      <button onClick={async () => {
-                        const [hrs, mins] = calendarTime.split(':').map(Number)
-                        const date = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), calendarComposeDay!, hrs || 9, mins || 0)
-                        setScheduledFor(date.toISOString().slice(0, 16))
-                        setScheduleMode('schedule')
-                        await new Promise(r => setTimeout(r, 50))
-                        await handleCreatePost()
-                        setCalendarComposeDay(null)
-                      }} disabled={!composeText.trim()} className="px-4 py-1.5 bg-gradient-to-r from-violet-500 to-pink-500 text-white rounded-lg text-sm font-medium disabled:opacity-40">Schedule</button>
+
+                    {/* Caption */}
+                    <textarea value={composeText} onChange={e => setComposeText(e.target.value)}
+                      placeholder="Write your caption..."
+                      className="w-full h-24 bg-secondary/50 text-foreground rounded-xl p-3 border border-border text-sm resize-none focus:outline-none focus:ring-1 focus:ring-violet-500/50" />
+
+                    {/* Media Upload Area */}
+                    <div className="space-y-2">
+                      <label className="text-xs text-muted-foreground font-medium">Media</label>
+
+                      {/* File Drop Zone */}
+                      <div
+                        className="border-2 border-dashed border-border rounded-xl p-4 text-center hover:border-violet-500/40 transition-colors cursor-pointer"
+                        onClick={() => document.getElementById('calendar-media-input')?.click()}
+                        onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-500/60', 'bg-violet-500/5') }}
+                        onDragLeave={(e) => { e.currentTarget.classList.remove('border-violet-500/60', 'bg-violet-500/5') }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          e.currentTarget.classList.remove('border-violet-500/60', 'bg-violet-500/5')
+                          const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'))
+                          if (files.length > 0) {
+                            setCalendarMediaFiles(prev => [...prev, ...files])
+                            files.forEach(file => {
+                              const reader = new FileReader()
+                              reader.onload = (ev) => setCalendarMediaPreviews(prev => [...prev, ev.target?.result as string])
+                              reader.readAsDataURL(file)
+                            })
+                          }
+                        }}
+                      >
+                        <input
+                          id="calendar-media-input"
+                          type="file"
+                          accept="image/*,video/*"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || [])
+                            if (files.length > 0) {
+                              setCalendarMediaFiles(prev => [...prev, ...files])
+                              files.forEach(file => {
+                                const reader = new FileReader()
+                                reader.onload = (ev) => setCalendarMediaPreviews(prev => [...prev, ev.target?.result as string])
+                                reader.readAsDataURL(file)
+                              })
+                            }
+                            e.target.value = ''
+                          }}
+                        />
+                        <div className="text-muted-foreground">
+                          <span className="text-lg">📎</span>
+                          <p className="text-xs mt-1">Drop images or videos here, or click to browse</p>
+                          <p className="text-[10px] text-muted-foreground/60 mt-0.5">JPEG, PNG, GIF, WebP, MP4, MOV · Max 50MB each</p>
+                        </div>
+                      </div>
+
+                      {/* Media Previews */}
+                      {calendarMediaPreviews.length > 0 && (
+                        <div className="flex gap-2 flex-wrap">
+                          {calendarMediaPreviews.map((preview, idx) => (
+                            <div key={idx} className="relative group">
+                              {calendarMediaFiles[idx]?.type.startsWith('video/') ? (
+                                <video src={preview} className="w-20 h-20 rounded-lg object-cover border border-border" />
+                              ) : (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={preview} alt="" className="w-20 h-20 rounded-lg object-cover border border-border" />
+                              )}
+                              <button
+                                onClick={() => {
+                                  setCalendarMediaFiles(prev => prev.filter((_, i) => i !== idx))
+                                  setCalendarMediaPreviews(prev => prev.filter((_, i) => i !== idx))
+                                }}
+                                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                              >×</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* URL input for external media */}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Or paste a media URL..."
+                          className="flex-1 bg-secondary/50 text-foreground rounded-lg px-3 py-1.5 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              const url = (e.target as HTMLInputElement).value.trim()
+                              if (url) {
+                                setCalendarMediaPreviews(prev => [...prev, url])
+                                setCalendarMediaFiles(prev => [...prev, new File([], url.split('/').pop() || 'media', { type: 'image/jpeg' })])
+                                ;(e.target as HTMLInputElement).value = ''
+                              }
+                            }
+                          }}
+                        />
+                      </div>
                     </div>
+
+                    {/* Platform selector (mini version) */}
+                    {accounts.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {accounts.map((account, idx) => {
+                          const color = getPlatformColor(account.platform)
+                          return (
+                            <button key={idx} onClick={() => togglePlatform(account.platform)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs transition-all ${
+                                selectedPlatforms.includes(account.platform) ? `${color.bg} border-white/20 ${color.text}` : 'bg-secondary/50 border-border text-muted-foreground'
+                              }`}>
+                              <PlatformIcon platform={account.platform} />
+                              <span>@{account.username}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Time + Schedule button */}
+                    <div className="flex items-center gap-3">
+                      <input type="time" value={calendarTime} onChange={e => setCalendarTime(e.target.value)}
+                        className="bg-secondary/50 text-foreground rounded-lg px-3 py-1.5 border border-border text-sm" />
+                      <button onClick={async () => {
+                        setUploadingMedia(true)
+                        try {
+                          const mediaUrls: string[] = []
+                          for (let i = 0; i < calendarMediaFiles.length; i++) {
+                            const file = calendarMediaFiles[i]
+                            if (file.size > 0) {
+                              const formData = new FormData()
+                              formData.append('file', file)
+                              const uploadRes = await fetch('/api/late/media', { method: 'POST', body: formData })
+                              if (uploadRes.ok) {
+                                const data = await uploadRes.json()
+                                mediaUrls.push(data.url)
+                              }
+                            } else {
+                              mediaUrls.push(calendarMediaPreviews[i])
+                            }
+                          }
+
+                          const [hrs, mins] = calendarTime.split(':').map(Number)
+                          const date = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), calendarComposeDay!, hrs || 9, mins || 0)
+                          setScheduledFor(date.toISOString().slice(0, 16))
+                          setScheduleMode('schedule')
+
+                          const postBody: Record<string, unknown> = {
+                            text: composeText,
+                            platforms: selectedPlatforms.length > 0 ? selectedPlatforms : accounts.map(a => a.platform),
+                            scheduledFor: date.toISOString()
+                          }
+                          if (mediaUrls.length > 0) postBody.mediaUrls = mediaUrls
+
+                          setPosting(true)
+                          const res = await fetch('/api/late/posts', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(postBody)
+                          })
+                          if (!res.ok) throw new Error('Failed to schedule post')
+
+                          setPostSuccess('Scheduled!')
+                          setComposeText('')
+                          setCalendarMediaFiles([])
+                          setCalendarMediaPreviews([])
+                          setSelectedPlatforms([])
+                          setCalendarComposeDay(null)
+                          fetchData()
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : 'Failed to schedule')
+                        } finally {
+                          setUploadingMedia(false)
+                          setPosting(false)
+                        }
+                      }} disabled={!composeText.trim() || uploadingMedia || posting}
+                        className="px-4 py-1.5 bg-gradient-to-r from-violet-500 to-pink-500 text-white rounded-lg text-sm font-medium disabled:opacity-40 flex items-center gap-2">
+                        {uploadingMedia ? '⏳ Uploading...' : posting ? '⏳ Scheduling...' : '📅 Schedule'}
+                      </button>
+                    </div>
+
+                    {/* Success/Error feedback */}
+                    {postSuccess && <div className="text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg">{postSuccess}</div>}
+                    {error && <div className="text-xs text-red-400 bg-red-500/10 px-3 py-1.5 rounded-lg">{error}</div>}
                   </div>
                 )}
               </div>
@@ -571,7 +778,7 @@ export function SocialMediaPanel() {
             {/* ═══════════════ ANALYTICS TAB ═══════════════ */}
             {activeTab === 'analytics' && (
               <div className="space-y-5">
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
                   <StatCard label="Published" value={String(analytics?.overview?.publishedPosts || 0)} icon="✅" gradient="from-emerald-500/20 to-teal-500/5" borderColor="border-emerald-500/20" />
                   <StatCard label="Scheduled" value={String(analytics?.overview?.scheduledPosts || 0)} icon="⏰" gradient="from-amber-500/20 to-orange-500/5" borderColor="border-amber-500/20" />
                   <StatCard label="Impressions" value={formatNumber(totalImpressions)} icon="👁" gradient="from-blue-500/20 to-indigo-500/5" borderColor="border-blue-500/20" />
@@ -612,9 +819,9 @@ export function SocialMediaPanel() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-5">
                   {/* ER per Post Bar Chart */}
-                  <div className="bg-card border border-border rounded-xl p-5">
+                  <div className="bg-card border border-border rounded-xl p-3 md:p-5">
                     <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-pink-500" /> Engagement Rate by Post
                     </h3>
@@ -637,7 +844,7 @@ export function SocialMediaPanel() {
                   </div>
 
                   {/* Engagement Pie */}
-                  <div className="bg-card border border-border rounded-xl p-5">
+                  <div className="bg-card border border-border rounded-xl p-3 md:p-5">
                     <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Engagement Breakdown
                     </h3>
@@ -777,7 +984,7 @@ export function SocialMediaPanel() {
                 {aiRecommendations.length > 0 && (
                   <div className="space-y-3">
                     <h3 className="text-lg font-semibold flex items-center gap-2"><span className="text-xl">🤖</span> AI Recommendations</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {aiRecommendations.map((rec, i) => (
                         <div key={i} className={`rounded-xl border p-4 transition-all hover:scale-[1.01] ${
                           rec.type === 'success' ? 'border-emerald-500/30 bg-emerald-500/[0.04]' :
@@ -825,9 +1032,9 @@ export function SocialMediaPanel() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-5">
                   {bestTimesToPost.byHour.length > 0 && (
-                    <div className="bg-card border border-border rounded-xl p-5">
+                    <div className="bg-card border border-border rounded-xl p-3 md:p-5">
                       <h3 className="text-base font-semibold mb-4 flex items-center gap-2"><span>🕐</span> Best Hours to Post</h3>
                       <div className="h-[240px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -849,7 +1056,7 @@ export function SocialMediaPanel() {
                     </div>
                   )}
                   {bestTimesToPost.byDay.length > 0 && (
-                    <div className="bg-card border border-border rounded-xl p-5">
+                    <div className="bg-card border border-border rounded-xl p-3 md:p-5">
                       <h3 className="text-base font-semibold mb-4 flex items-center gap-2"><span>📅</span> Best Days to Post</h3>
                       <div className="h-[240px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -956,6 +1163,93 @@ export function SocialMediaPanel() {
                       </div>
                     </div>
                   )}
+                  {/* Media Upload Area */}
+                  <div className="space-y-3">
+                    <label className="block text-sm text-muted-foreground">Media</label>
+                    <div
+                      className="border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-violet-500/40 transition-colors cursor-pointer"
+                      onClick={() => document.getElementById('compose-media-input')?.click()}
+                      onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-500/60', 'bg-violet-500/5') }}
+                      onDragLeave={(e) => { e.currentTarget.classList.remove('border-violet-500/60', 'bg-violet-500/5') }}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        e.currentTarget.classList.remove('border-violet-500/60', 'bg-violet-500/5')
+                        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'))
+                        if (files.length > 0) {
+                          setCalendarMediaFiles(prev => [...prev, ...files])
+                          files.forEach(file => {
+                            const reader = new FileReader()
+                            reader.onload = (ev) => setCalendarMediaPreviews(prev => [...prev, ev.target?.result as string])
+                            reader.readAsDataURL(file)
+                          })
+                        }
+                      }}
+                    >
+                      <input
+                        id="compose-media-input"
+                        type="file"
+                        accept="image/*,video/*"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || [])
+                          if (files.length > 0) {
+                            setCalendarMediaFiles(prev => [...prev, ...files])
+                            files.forEach(file => {
+                              const reader = new FileReader()
+                              reader.onload = (ev) => setCalendarMediaPreviews(prev => [...prev, ev.target?.result as string])
+                              reader.readAsDataURL(file)
+                            })
+                          }
+                          e.target.value = ''
+                        }}
+                      />
+                      <div className="text-muted-foreground">
+                        <span className="text-2xl">📎</span>
+                        <p className="text-sm mt-2">Drop images or videos here, or click to browse</p>
+                        <p className="text-xs text-muted-foreground/60 mt-1">JPEG, PNG, GIF, WebP, MP4, MOV · Max 50MB each</p>
+                      </div>
+                    </div>
+
+                    {calendarMediaPreviews.length > 0 && (
+                      <div className="flex gap-3 flex-wrap">
+                        {calendarMediaPreviews.map((preview, idx) => (
+                          <div key={idx} className="relative group">
+                            {calendarMediaFiles[idx]?.type.startsWith('video/') ? (
+                              <video src={preview} className="w-24 h-24 rounded-xl object-cover border border-border" />
+                            ) : (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={preview} alt="" className="w-24 h-24 rounded-xl object-cover border border-border" />
+                            )}
+                            <button
+                              onClick={() => {
+                                setCalendarMediaFiles(prev => prev.filter((_, i) => i !== idx))
+                                setCalendarMediaPreviews(prev => prev.filter((_, i) => i !== idx))
+                              }}
+                              className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            >×</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <input
+                      type="text"
+                      placeholder="Or paste a media URL and press Enter..."
+                      className="w-full bg-secondary/50 text-foreground rounded-xl px-4 py-2.5 border border-border text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const url = (e.target as HTMLInputElement).value.trim()
+                          if (url) {
+                            setCalendarMediaPreviews(prev => [...prev, url])
+                            setCalendarMediaFiles(prev => [...prev, new File([], url.split('/').pop() || 'media', { type: 'image/jpeg' })])
+                            ;(e.target as HTMLInputElement).value = ''
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+
                   <div className="flex gap-2">
                     <button onClick={() => setScheduleMode('now')}
                       className={`px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${scheduleMode === 'now' ? 'bg-gradient-to-r from-violet-500 to-pink-500 text-white' : 'bg-secondary/50 text-muted-foreground border border-border'}`}>Post Now</button>
@@ -976,14 +1270,26 @@ export function SocialMediaPanel() {
 
             {/* ═══════════════ ACCOUNTS TAB ═══════════════ */}
             {activeTab === 'accounts' && (
-              <div className="space-y-4">
-                {accounts.length === 0 ? (
-                  <div className="flex flex-col items-center py-16 space-y-4">
-                    <span className="text-3xl">🔗</span>
-                    <p className="text-muted-foreground">No connected accounts</p>
+              <div className="space-y-6">
+                {/* Header with connect button */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground">Connected Accounts</h3>
+                    <p className="text-xs text-muted-foreground mt-1">Connect accounts via Late dashboard, they&apos;ll appear here automatically.</p>
                   </div>
-                ) : (
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <a
+                    href="https://getlate.dev/dashboard"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 bg-gradient-to-r from-violet-500 to-pink-500 text-white rounded-xl text-sm font-medium hover:shadow-lg hover:shadow-violet-500/25 transition-all"
+                  >
+                    + Connect Account
+                  </a>
+                </div>
+
+                {/* Connected accounts */}
+                {accounts.length > 0 && (
+                  <div className="grid gap-3 md:gap-4 grid-cols-1 md:grid-cols-2">
                     {accounts.map((account, idx) => {
                       const color = getPlatformColor(account.platform)
                       return (
@@ -1026,6 +1332,66 @@ export function SocialMediaPanel() {
                     })}
                   </div>
                 )}
+
+                {/* Available platforms */}
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-violet-500" /> All Supported Platforms
+                  </h3>
+                  <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                    {[
+                      { name: 'Instagram', key: 'instagram' },
+                      { name: 'Twitter / X', key: 'twitter' },
+                      { name: 'LinkedIn', key: 'linkedin' },
+                      { name: 'TikTok', key: 'tiktok' },
+                      { name: 'Facebook', key: 'facebook' },
+                      { name: 'YouTube', key: 'youtube' },
+                      { name: 'Threads', key: 'threads' },
+                      { name: 'Pinterest', key: 'pinterest' },
+                      { name: 'Bluesky', key: 'bluesky' },
+                      { name: 'Mastodon', key: 'mastodon' },
+                      { name: 'Telegram', key: 'telegram' },
+                      { name: 'Discord', key: 'discord' },
+                      { name: 'Slack', key: 'slack' },
+                      { name: 'WhatsApp', key: 'whatsapp' },
+                    ].map(platform => {
+                      const connected = accounts.find(a => a.platform.toLowerCase() === platform.key)
+                      const color = getPlatformColor(platform.key)
+                      return (
+                        <div key={platform.key} className={`rounded-xl border overflow-hidden ${connected ? 'border-emerald-500/30' : 'border-border'}`}>
+                          <div className={`h-1 bg-gradient-to-r ${color.from} ${color.to} ${connected ? 'opacity-100' : 'opacity-30'}`} />
+                          <div className="p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${color.from} ${color.to} flex items-center justify-center text-white ${connected ? '' : 'opacity-40'}`}>
+                                <PlatformIcon platform={platform.key} size="lg" />
+                              </div>
+                              <div>
+                                <div className={`font-medium text-sm ${connected ? 'text-foreground' : 'text-muted-foreground'}`}>{platform.name}</div>
+                                {connected && (
+                                  <div className="text-xs text-emerald-400">@{connected.username} · {formatNumber(connected.followersCount)} followers</div>
+                                )}
+                              </div>
+                            </div>
+                            {connected ? (
+                              <span className="px-2.5 py-1 text-xs rounded-full font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                                Connected
+                              </span>
+                            ) : (
+                              <a
+                                href="https://getlate.dev/dashboard"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-1.5 text-xs rounded-lg font-medium bg-secondary/80 text-muted-foreground border border-border hover:bg-secondary hover:text-foreground transition-all"
+                              >
+                                Connect
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
               </div>
             )}
           </>
@@ -1043,12 +1409,12 @@ function StatCard({ label, value, icon, gradient, borderColor }: {
   label: string; value: string; icon: string; gradient: string; borderColor: string
 }) {
   return (
-    <div className={`relative overflow-hidden rounded-xl border ${borderColor} p-4 transition-all duration-300 hover:scale-[1.02]`}>
+    <div className={`relative overflow-hidden rounded-xl border ${borderColor} p-3 md:p-4 transition-all duration-300 hover:scale-[1.02]`}>
       <div className={`absolute inset-0 bg-gradient-to-br ${gradient}`} />
       <div className="relative">
-        <div className="flex items-center justify-between mb-2"><span className="text-lg">{icon}</span></div>
-        <div className="text-2xl font-bold text-foreground tabular-nums">{value}</div>
-        <div className="text-xs text-muted-foreground mt-1 uppercase tracking-wider">{label}</div>
+        <div className="flex items-center justify-between mb-1.5 md:mb-2"><span className="text-base md:text-lg">{icon}</span></div>
+        <div className="text-xl md:text-2xl font-bold text-foreground tabular-nums">{value}</div>
+        <div className="text-[10px] md:text-xs text-muted-foreground mt-1 uppercase tracking-wider">{label}</div>
       </div>
     </div>
   )

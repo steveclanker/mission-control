@@ -50,6 +50,64 @@ function formatDateLabel(date: Date): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+function parseNaturalLanguageCron(input: string): string | null {
+  const val = input.trim().toLowerCase()
+  // Already looks like cron
+  if (/^[\d*,/-]+\s+[\d*,/-]+\s+[\d*,/-]+\s+[\d*,/-]+\s+[\d*,/-]+$/.test(val)) return null
+
+  const dayMap: Record<string, string> = {
+    sunday: '0', sun: '0', monday: '1', mon: '1', tuesday: '2', tue: '2',
+    wednesday: '3', wed: '3', thursday: '4', thu: '4', friday: '5', fri: '5',
+    saturday: '6', sat: '6',
+  }
+
+  // "every X minutes"
+  let match = val.match(/every\s+(\d+)\s*min/)
+  if (match) return `*/${match[1]} * * * *`
+
+  // "every minute"
+  if (/every\s+minute/.test(val)) return '* * * * *'
+
+  // "every hour"
+  if (/every\s+hour/.test(val)) return '0 * * * *'
+
+  // "every X hours"
+  match = val.match(/every\s+(\d+)\s*hour/)
+  if (match) return `0 */${match[1]} * * *`
+
+  // "every day at Xam/pm" or "daily at X"
+  match = val.match(/(?:every\s+day|daily)\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/)
+  if (match) {
+    let hour = parseInt(match[1])
+    const minute = match[2] ? parseInt(match[2]) : 0
+    if (match[3] === 'pm' && hour < 12) hour += 12
+    if (match[3] === 'am' && hour === 12) hour = 0
+    return `${minute} ${hour} * * *`
+  }
+
+  // "every <day> at Xam/pm"
+  match = val.match(/every\s+(\w+)\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/)
+  if (match && dayMap[match[1]]) {
+    let hour = parseInt(match[2])
+    const minute = match[3] ? parseInt(match[3]) : 0
+    if (match[4] === 'pm' && hour < 12) hour += 12
+    if (match[4] === 'am' && hour === 12) hour = 0
+    return `${minute} ${hour} * * ${dayMap[match[1]]}`
+  }
+
+  // "every weekday at X"
+  match = val.match(/every\s+weekday\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/)
+  if (match) {
+    let hour = parseInt(match[1])
+    const minute = match[2] ? parseInt(match[2]) : 0
+    if (match[3] === 'pm' && hour < 12) hour += 12
+    if (match[3] === 'am' && hour === 12) hour = 0
+    return `${minute} ${hour} * * 1-5`
+  }
+
+  return null
+}
+
 export function CronManagementPanel() {
   const { cronJobs, setCronJobs } = useMissionControl()
   const [isLoading, setIsLoading] = useState(false)
@@ -632,6 +690,31 @@ export function CronManagementPanel() {
           </div>
         </div>
 
+        {/* Next 10 Upcoming Runs */}
+        <div className="lg:col-span-2 bg-card border border-border rounded-lg p-6">
+          <h2 className="text-xl font-semibold mb-3">Next 10 Upcoming Runs</h2>
+          {calendarOccurrences.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No upcoming runs detected.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {calendarOccurrences.slice(0, 10).map((occ, i) => {
+                const dt = new Date(occ.atMs)
+                const isHourly = occ.job.schedule.includes('* * * *') || occ.job.schedule.startsWith('0 ')
+                const isDaily = /^\d+\s+\d+\s+\*\s+\*\s+\*$/.test(occ.job.schedule)
+                const isWeekly = /^\d+\s+\d+\s+\*\s+\*\s+\d$/.test(occ.job.schedule)
+                const freqColor = isHourly ? 'bg-blue-500/20 text-blue-400' : isDaily ? 'bg-emerald-500/20 text-emerald-400' : isWeekly ? 'bg-violet-500/20 text-violet-400' : 'bg-amber-500/20 text-amber-400'
+                return (
+                  <div key={`${occ.job.name}-${occ.atMs}-${i}`} className="flex items-center gap-3 px-3 py-2 bg-secondary/50 rounded-lg text-sm">
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${freqColor}`}>{dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="text-xs text-muted-foreground">{dt.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                    <span className="text-foreground truncate flex-1">{occ.job.name}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Job List */}
         <div className="bg-card border border-border rounded-lg p-6">
           <h2 className="text-xl font-semibold mb-4">Scheduled Jobs</h2>
@@ -813,13 +896,24 @@ export function CronManagementPanel() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">Schedule (Cron Format)</label>
+                <label className="block text-sm font-medium text-foreground mb-2">Schedule (Cron or Natural Language)</label>
                 <div className="flex space-x-2">
                   <input
                     type="text"
                     value={newJob.schedule}
-                    onChange={(e) => setNewJob(prev => ({ ...prev, schedule: e.target.value }))}
-                    placeholder="0 * * * *"
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setNewJob(prev => ({ ...prev, schedule: val }))
+                    }}
+                    onBlur={(e) => {
+                      // Try to parse natural language into cron
+                      const val = e.target.value.trim().toLowerCase()
+                      const parsed = parseNaturalLanguageCron(val)
+                      if (parsed && parsed !== val) {
+                        setNewJob(prev => ({ ...prev, schedule: parsed }))
+                      }
+                    }}
+                    placeholder="every Monday at 9am  or  0 9 * * 1"
                     className="flex-1 px-3 py-2 border border-border rounded-md bg-background text-foreground font-mono"
                   />
                   <select
@@ -834,7 +928,7 @@ export function CronManagementPanel() {
                   </select>
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  Format: minute hour day month dayOfWeek
+                  Try natural language: &quot;every day at 9am&quot;, &quot;every Monday at 3pm&quot;, &quot;every 30 minutes&quot;, or cron format
                 </div>
               </div>
 

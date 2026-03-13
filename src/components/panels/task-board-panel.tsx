@@ -253,10 +253,14 @@ export function TaskBoardPanel() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [aegisMap, setAegisMap] = useState<Record<number, boolean>>({})
+  const [taskDepsMap, setTaskDepsMap] = useState<Record<number, boolean>>({})
   const [draggedTask, setDraggedTask] = useState<Task | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showProjectManager, setShowProjectManager] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [viewMode, setViewMode] = useState<'board' | 'calendar'>('board')
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date())
+  const [calendarSelectedDay, setCalendarSelectedDay] = useState<number | null>(null)
   const dragCounter = useRef(0)
   const selectedTaskIdFromUrl = Number.parseInt(searchParams.get('taskId') || '', 10)
 
@@ -330,8 +334,28 @@ export function TaskBoardPanel() {
         }
       }
 
+      // Fetch dependency info for all tasks
+      let newDepsMap: Record<number, boolean> = {}
+      if (taskIds.length > 0) {
+        try {
+          const depsPromises = taskIds.map((id: number) =>
+            fetch(`/api/tasks/${id}/dependencies`).then(r => r.ok ? r.json() : null).catch(() => null)
+          )
+          const depsResults = await Promise.all(depsPromises)
+          for (let i = 0; i < taskIds.length; i++) {
+            const data = depsResults[i]
+            if (data && ((data.dependsOn && data.dependsOn.length > 0) || (data.dependents && data.dependents.length > 0))) {
+              newDepsMap[taskIds[i]] = true
+            }
+          }
+        } catch {
+          newDepsMap = {}
+        }
+      }
+
       storeSetTasks(tasksList)
       setAegisMap(newAegisMap)
+      setTaskDepsMap(newDepsMap)
       setAgents(agentsData.agents || [])
       setProjects(projectsData.projects || [])
     } catch (err) {
@@ -509,13 +533,27 @@ export function TaskBoardPanel() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex justify-between items-center p-4 border-b border-border flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-bold text-foreground">Task Board</h2>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-3 md:p-4 border-b border-border flex-shrink-0">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <h2 className="text-lg md:text-xl font-bold text-foreground">Task Board</h2>
+          <div className="flex rounded-md border border-border overflow-hidden">
+            <button
+              onClick={() => setViewMode('board')}
+              className={`px-3 py-1.5 text-xs font-medium transition-smooth ${viewMode === 'board' ? 'bg-primary text-primary-foreground' : 'bg-surface-1 text-muted-foreground hover:bg-surface-2'}`}
+            >
+              Board
+            </button>
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={`px-3 py-1.5 text-xs font-medium transition-smooth ${viewMode === 'calendar' ? 'bg-primary text-primary-foreground' : 'bg-surface-1 text-muted-foreground hover:bg-surface-2'}`}
+            >
+              Calendar
+            </button>
+          </div>
           <select
             value={projectFilter}
             onChange={(e) => setProjectFilter(e.target.value)}
-            className="h-9 px-3 bg-surface-1 text-foreground border border-border rounded-md text-sm"
+            className="h-9 px-3 bg-surface-1 text-foreground border border-border rounded-md text-sm flex-1 sm:flex-none"
           >
             <option value="all">All Projects</option>
             {projects.map((project) => (
@@ -525,22 +563,30 @@ export function TaskBoardPanel() {
             ))}
           </select>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 w-full sm:w-auto">
+          <button
+            onClick={() => {
+              window.open('/api/export?type=tasks&format=csv', '_blank')
+            }}
+            className="flex-1 sm:flex-none px-3 md:px-4 py-2 bg-secondary text-muted-foreground rounded-md hover:bg-surface-2 transition-smooth text-sm font-medium"
+          >
+            Export CSV
+          </button>
           <button
             onClick={() => setShowProjectManager(true)}
-            className="px-4 py-2 bg-secondary text-muted-foreground rounded-md hover:bg-surface-2 transition-smooth text-sm font-medium"
+            className="flex-1 sm:flex-none px-3 md:px-4 py-2 bg-secondary text-muted-foreground rounded-md hover:bg-surface-2 transition-smooth text-sm font-medium"
           >
             Projects
           </button>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-smooth text-sm font-medium"
+            className="flex-1 sm:flex-none px-3 md:px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-smooth text-sm font-medium"
           >
             + New Task
           </button>
           <button
             onClick={fetchData}
-            className="px-4 py-2 bg-secondary text-muted-foreground rounded-md hover:bg-surface-2 transition-smooth text-sm font-medium"
+            className="px-3 md:px-4 py-2 bg-secondary text-muted-foreground rounded-md hover:bg-surface-2 transition-smooth text-sm font-medium"
           >
             Refresh
           </button>
@@ -561,14 +607,29 @@ export function TaskBoardPanel() {
         </div>
       )}
 
+      {/* Calendar View */}
+      {viewMode === 'calendar' && (
+        <TaskCalendarView
+          tasks={tasks}
+          calendarMonth={calendarMonth}
+          setCalendarMonth={setCalendarMonth}
+          calendarSelectedDay={calendarSelectedDay}
+          setCalendarSelectedDay={setCalendarSelectedDay}
+          onTaskClick={(task) => {
+            setSelectedTask(task)
+            updateTaskUrl(task.id)
+          }}
+        />
+      )}
+
       {/* Kanban Board */}
-      <div className="flex-1 flex gap-4 p-4 overflow-x-auto" role="region" aria-label="Task board">
+      {viewMode === 'board' && <div className="flex-1 flex flex-col md:flex-row gap-3 md:gap-4 p-3 md:p-4 overflow-x-auto md:overflow-x-auto snap-x snap-mandatory md:snap-none" role="region" aria-label="Task board">
         {statusColumns.map(column => (
           <div
             key={column.key}
             role="region"
             aria-label={`${column.title} column, ${tasksByStatus[column.key]?.length || 0} tasks`}
-            className="flex-1 min-w-80 bg-card border border-border rounded-lg flex flex-col"
+            className="flex-1 min-w-[85vw] sm:min-w-[70vw] md:min-w-80 bg-card border border-border rounded-lg flex flex-col snap-center md:snap-align-none shrink-0 md:shrink"
             onDragEnter={(e) => handleDragEnter(e, column.key)}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
@@ -615,6 +676,11 @@ export function TaskBoardPanel() {
                       {task.ticket_ref && (
                         <span className="text-[10px] px-2 py-0.5 rounded bg-primary/20 text-primary">
                           {task.ticket_ref}
+                        </span>
+                      )}
+                      {taskDepsMap[task.id] && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400" title="Has dependencies">
+                          🔗
                         </span>
                       )}
                       {task.aegisApproved && (
@@ -703,12 +769,13 @@ export function TaskBoardPanel() {
             </div>
           </div>
         ))}
-      </div>
+      </div>}
 
       {/* Task Detail Modal */}
       {selectedTask && !editingTask && (
         <TaskDetailModal
           task={selectedTask}
+          tasks={tasks}
           agents={agents}
           projects={projects}
           onClose={() => {
@@ -720,6 +787,17 @@ export function TaskBoardPanel() {
             setEditingTask(taskToEdit)
             setSelectedTask(null)
             updateTaskUrl(null, 'replace')
+          }}
+          onDelete={async (taskId) => {
+            try {
+              const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' })
+              if (!res.ok) throw new Error('Failed to delete task')
+              setSelectedTask(null)
+              updateTaskUrl(null)
+              fetchData()
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Failed to delete task')
+            }
           }}
         />
       )}
@@ -755,21 +833,387 @@ export function TaskBoardPanel() {
   )
 }
 
+// Calendar View Component
+function TaskCalendarView({
+  tasks,
+  calendarMonth,
+  setCalendarMonth,
+  calendarSelectedDay,
+  setCalendarSelectedDay,
+  onTaskClick,
+}: {
+  tasks: Task[]
+  calendarMonth: Date
+  setCalendarMonth: (d: Date) => void
+  calendarSelectedDay: number | null
+  setCalendarSelectedDay: (d: number | null) => void
+  onTaskClick: (task: Task) => void
+}) {
+  const year = calendarMonth.getFullYear()
+  const month = calendarMonth.getMonth()
+  const firstDay = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+
+  const calendarDays: (number | null)[] = []
+  for (let i = 0; i < firstDay; i++) calendarDays.push(null)
+  for (let i = 1; i <= daysInMonth; i++) calendarDays.push(i)
+
+  const tasksForDay = (day: number): Task[] => {
+    return tasks.filter(t => {
+      if (!t.due_date) return false
+      const d = new Date(t.due_date * 1000)
+      return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day
+    })
+  }
+
+  const tasksWithoutDate = tasks.filter(t => !t.due_date)
+  const selectedDayTasks = calendarSelectedDay ? tasksForDay(calendarSelectedDay) : []
+
+  const priorityDotColor: Record<string, string> = {
+    urgent: 'bg-red-500',
+    critical: 'bg-red-500',
+    high: 'bg-orange-500',
+    medium: 'bg-blue-500',
+    low: 'bg-gray-400',
+  }
+
+  const priorityTextColor: Record<string, string> = {
+    urgent: 'text-red-400',
+    critical: 'text-red-400',
+    high: 'text-orange-400',
+    medium: 'text-blue-400',
+    low: 'text-gray-400',
+  }
+
+  const today = new Date()
+  const isToday = (day: number) =>
+    today.getFullYear() === year && today.getMonth() === month && today.getDate() === day
+
+  return (
+    <div className="flex-1 flex flex-col md:flex-row gap-4 p-3 md:p-4 overflow-hidden">
+      {/* Calendar Grid */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex items-center justify-between mb-4">
+          <button
+            onClick={() => setCalendarMonth(new Date(year, month - 1, 1))}
+            className="px-3 py-1.5 bg-secondary text-muted-foreground rounded-md hover:bg-surface-2 transition-smooth text-sm"
+          >
+            ← Prev
+          </button>
+          <h3 className="text-lg font-semibold text-foreground">
+            {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          </h3>
+          <button
+            onClick={() => setCalendarMonth(new Date(year, month + 1, 1))}
+            className="px-3 py-1.5 bg-secondary text-muted-foreground rounded-md hover:bg-surface-2 transition-smooth text-sm"
+          >
+            Next →
+          </button>
+        </div>
+
+        <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden flex-1">
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+            <div key={day} className="bg-surface-1 p-2 text-center text-xs font-medium text-muted-foreground">
+              {day}
+            </div>
+          ))}
+          {calendarDays.map((day, idx) => {
+            const dayTasks = day ? tasksForDay(day) : []
+            const isSelected = day === calendarSelectedDay
+            return (
+              <div
+                key={idx}
+                onClick={() => day && setCalendarSelectedDay(isSelected ? null : day)}
+                className={`bg-card p-1.5 min-h-[80px] cursor-pointer transition-smooth hover:bg-surface-1 ${
+                  isSelected ? 'ring-2 ring-primary ring-inset' : ''
+                } ${!day ? 'bg-surface-1/50' : ''} ${day && isToday(day) ? 'bg-primary/5' : ''}`}
+              >
+                {day && (
+                  <>
+                    <div className={`text-xs font-medium mb-1 ${isToday(day) ? 'text-primary font-bold' : 'text-foreground'}`}>
+                      {day}
+                    </div>
+                    <div className="space-y-0.5">
+                      {dayTasks.slice(0, 3).map(task => (
+                        <div
+                          key={task.id}
+                          onClick={(e) => { e.stopPropagation(); onTaskClick(task) }}
+                          className={`text-[10px] leading-tight px-1 py-0.5 rounded truncate cursor-pointer hover:opacity-80 ${
+                            priorityDotColor[task.priority] || 'bg-gray-400'
+                          }/20 ${priorityTextColor[task.priority] || 'text-gray-400'}`}
+                        >
+                          {task.title}
+                        </div>
+                      ))}
+                      {dayTasks.length > 3 && (
+                        <div className="text-[10px] text-muted-foreground pl-1">
+                          +{dayTasks.length - 3} more
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Sidebar: Selected day or No-date tasks */}
+      <div className="w-full md:w-72 flex-shrink-0 bg-card border border-border rounded-lg overflow-y-auto max-h-[calc(100vh-200px)]">
+        {calendarSelectedDay ? (
+          <div className="p-3">
+            <h4 className="text-sm font-semibold text-foreground mb-3">
+              {new Date(year, month, calendarSelectedDay).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+              <span className="ml-2 text-xs text-muted-foreground">({selectedDayTasks.length} task{selectedDayTasks.length !== 1 ? 's' : ''})</span>
+            </h4>
+            {selectedDayTasks.length === 0 ? (
+              <p className="text-sm text-muted-foreground/50">No tasks due this day</p>
+            ) : (
+              <div className="space-y-2">
+                {selectedDayTasks.map(task => (
+                  <div
+                    key={task.id}
+                    onClick={() => onTaskClick(task)}
+                    className={`p-2.5 bg-surface-1 rounded-md cursor-pointer hover:bg-surface-2 transition-smooth border-l-4 ${priorityColors[task.priority]}`}
+                  >
+                    <div className="text-sm font-medium text-foreground">{task.title}</div>
+                    <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        task.priority === 'critical' || task.priority === 'urgent' ? 'bg-red-500/20 text-red-400' :
+                        task.priority === 'high' ? 'bg-orange-500/20 text-orange-400' :
+                        task.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                        'bg-green-500/20 text-green-400'
+                      }`}>{task.priority}</span>
+                      <span>{task.status.replace(/_/g, ' ')}</span>
+                    </div>
+                    {task.assigned_to && (
+                      <div className="text-xs text-muted-foreground mt-1">→ {task.assigned_to}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="p-3">
+            <h4 className="text-sm font-semibold text-foreground mb-3">
+              No Date
+              <span className="ml-2 text-xs text-muted-foreground">({tasksWithoutDate.length} task{tasksWithoutDate.length !== 1 ? 's' : ''})</span>
+            </h4>
+            {tasksWithoutDate.length === 0 ? (
+              <p className="text-sm text-muted-foreground/50">All tasks have due dates</p>
+            ) : (
+              <div className="space-y-2">
+                {tasksWithoutDate.slice(0, 20).map(task => (
+                  <div
+                    key={task.id}
+                    onClick={() => onTaskClick(task)}
+                    className={`p-2.5 bg-surface-1 rounded-md cursor-pointer hover:bg-surface-2 transition-smooth border-l-4 ${priorityColors[task.priority]}`}
+                  >
+                    <div className="text-sm font-medium text-foreground truncate">{task.title}</div>
+                    <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        task.priority === 'critical' || task.priority === 'urgent' ? 'bg-red-500/20 text-red-400' :
+                        task.priority === 'high' ? 'bg-orange-500/20 text-orange-400' :
+                        task.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                        'bg-green-500/20 text-green-400'
+                      }`}>{task.priority}</span>
+                      <span>{task.status.replace(/_/g, ' ')}</span>
+                    </div>
+                  </div>
+                ))}
+                {tasksWithoutDate.length > 20 && (
+                  <p className="text-xs text-muted-foreground text-center">+{tasksWithoutDate.length - 20} more</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Task Dependencies Section Component
+function TaskDependenciesSection({
+  taskId,
+  allTasks,
+  onUpdate
+}: {
+  taskId: number
+  allTasks: Task[]
+  onUpdate: () => void
+}) {
+  const [deps, setDeps] = useState<{ dependsOn: any[]; dependents: any[]; hasUnfinishedDeps: boolean }>({ dependsOn: [], dependents: [], hasUnfinishedDeps: false })
+  const [loading, setLoading] = useState(true)
+  const [addingDep, setAddingDep] = useState(false)
+  const [selectedDepId, setSelectedDepId] = useState('')
+
+  const fetchDeps = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/dependencies`)
+      if (res.ok) {
+        const data = await res.json()
+        setDeps(data)
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false)
+    }
+  }, [taskId])
+
+  useEffect(() => { fetchDeps() }, [fetchDeps])
+
+  const addDependency = async () => {
+    if (!selectedDepId) return
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/dependencies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ depends_on_id: parseInt(selectedDepId) })
+      })
+      if (res.ok) {
+        setSelectedDepId('')
+        setAddingDep(false)
+        await fetchDeps()
+        onUpdate()
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Failed to add dependency')
+      }
+    } catch {
+      alert('Failed to add dependency')
+    }
+  }
+
+  const removeDependency = async (depId: number) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/dependencies?dep_id=${depId}`, { method: 'DELETE' })
+      if (res.ok) {
+        await fetchDeps()
+        onUpdate()
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Filter out current task and already-added dependencies from the picker
+  const existingDepIds = new Set(deps.dependsOn.map((d: any) => d.depends_on_id))
+  const availableTasks = allTasks.filter(t => t.id !== taskId && !existingDepIds.has(t.id))
+
+  if (loading) return <div className="text-xs text-muted-foreground">Loading dependencies...</div>
+
+  return (
+    <div className="bg-surface-1/40 border border-border rounded-lg p-3">
+      <div className="flex items-center justify-between mb-2">
+        <h5 className="text-sm font-medium text-foreground">🔗 Dependencies</h5>
+        <button
+          onClick={() => setAddingDep(!addingDep)}
+          className="text-xs px-2 py-1 bg-primary/20 text-primary rounded hover:bg-primary/30 transition-smooth"
+        >
+          {addingDep ? 'Cancel' : '+ Add'}
+        </button>
+      </div>
+
+      {deps.hasUnfinishedDeps && (
+        <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 rounded p-2 text-xs mb-2">
+          ⚠️ This task has unfinished dependencies
+        </div>
+      )}
+
+      {/* Dependencies this task depends on */}
+      {deps.dependsOn.length > 0 && (
+        <div className="mb-2">
+          <div className="text-xs text-muted-foreground mb-1">Depends on:</div>
+          <div className="space-y-1">
+            {deps.dependsOn.map((dep: any) => (
+              <div key={dep.dependency_id} className="flex items-center justify-between bg-zinc-800/50 rounded px-2 py-1">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className={`w-2 h-2 rounded-full ${dep.status === 'done' ? 'bg-emerald-500' : 'bg-yellow-500'}`} />
+                  <span className="text-foreground">{dep.title}</span>
+                  <span className="text-muted-foreground">({dep.status})</span>
+                </div>
+                <button
+                  onClick={() => removeDependency(dep.dependency_id)}
+                  className="text-red-400 hover:text-red-300 text-xs px-1"
+                  title="Remove dependency"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tasks that depend on this task */}
+      {deps.dependents.length > 0 && (
+        <div className="mb-2">
+          <div className="text-xs text-muted-foreground mb-1">Required by:</div>
+          <div className="space-y-1">
+            {deps.dependents.map((dep: any) => (
+              <div key={dep.dependency_id} className="flex items-center gap-2 bg-zinc-800/50 rounded px-2 py-1 text-xs">
+                <span className={`w-2 h-2 rounded-full ${dep.status === 'done' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
+                <span className="text-foreground">{dep.title}</span>
+                <span className="text-muted-foreground">({dep.status})</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {deps.dependsOn.length === 0 && deps.dependents.length === 0 && !addingDep && (
+        <div className="text-xs text-muted-foreground/50">No dependencies</div>
+      )}
+
+      {/* Add dependency picker */}
+      {addingDep && (
+        <div className="flex gap-2 mt-2">
+          <select
+            value={selectedDepId}
+            onChange={(e) => setSelectedDepId(e.target.value)}
+            className="flex-1 bg-surface-1 text-foreground border border-border rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary/50"
+          >
+            <option value="">Select a task...</option>
+            {availableTasks.map(t => (
+              <option key={t.id} value={String(t.id)}>#{t.id} - {t.title}</option>
+            ))}
+          </select>
+          <button
+            onClick={addDependency}
+            disabled={!selectedDepId}
+            className="px-3 py-1 bg-primary text-primary-foreground rounded text-xs hover:bg-primary/90 disabled:opacity-50"
+          >
+            Add
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Task Detail Modal Component (placeholder - would be implemented separately)
 function TaskDetailModal({
   task,
+  tasks,
   agents,
   projects,
   onClose,
   onUpdate,
-  onEdit
+  onEdit,
+  onDelete
 }: {
   task: Task
+  tasks: Task[]
   agents: Agent[]
   projects: Project[]
   onClose: () => void
   onUpdate: () => void
   onEdit: (task: Task) => void
+  onDelete: (taskId: number) => void
 }) {
   const { currentUser } = useMissionControl()
   const commentAuthor = currentUser?.username || 'system'
@@ -787,8 +1231,10 @@ function TaskDetailModal({
   const [reviewNotes, setReviewNotes] = useState('')
   const [reviewError, setReviewError] = useState<string | null>(null)
   const mentionTargets = useMentionTargets()
-  const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'quality'>('details')
+  const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'quality' | 'costs'>('details')
   const [reviewer, setReviewer] = useState('aegis')
+  const [taskCosts, setTaskCosts] = useState<{ total_cost: number; breakdown: { service: string; model: string; cost: number; tokens_in: number; tokens_out: number; count: number }[] } | null>(null)
+  const [loadingCosts, setLoadingCosts] = useState(false)
 
   const fetchReviews = useCallback(async () => {
     try {
@@ -798,6 +1244,20 @@ function TaskDetailModal({
       setReviews(data.reviews || [])
     } catch (error) {
       setReviewError('Failed to load quality reviews')
+    }
+  }, [task.id])
+
+  const fetchTaskCosts = useCallback(async () => {
+    try {
+      setLoadingCosts(true)
+      const response = await fetch(`/api/costs?task_id=${task.id}&timeframe=month`)
+      if (!response.ok) return
+      const data = await response.json()
+      if (data.taskCost) setTaskCosts(data.taskCost)
+    } catch {
+      // silently fail — costs are optional
+    } finally {
+      setLoadingCosts(false)
     }
   }, [task.id])
 
@@ -821,6 +1281,9 @@ function TaskDetailModal({
   useEffect(() => {
     fetchReviews()
   }, [fetchReviews])
+  useEffect(() => {
+    fetchTaskCosts()
+  }, [fetchTaskCosts])
   
   useSmartPoll(fetchComments, 15000)
 
@@ -912,9 +1375,9 @@ function TaskDetailModal({
   const dialogRef = useFocusTrap(onClose)
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="task-detail-title" className="bg-card border border-border rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center z-50 md:p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="task-detail-title" className="bg-card border border-border rounded-t-2xl md:rounded-lg max-w-2xl w-full max-h-[95vh] md:max-h-[90vh] overflow-y-auto">
+        <div className="p-4 md:p-6">
           <div className="flex justify-between items-start mb-4">
             <h3 id="task-detail-title" className="text-xl font-bold text-foreground">{task.title}</h3>
             <div className="flex gap-2">
@@ -923,6 +1386,16 @@ function TaskDetailModal({
                 className="px-3 py-1.5 bg-primary/20 text-primary hover:bg-primary/30 rounded-md transition-smooth text-sm font-medium"
               >
                 Edit
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm(`Delete task "${task.title}"? This cannot be undone.`)) {
+                    onDelete(task.id)
+                  }
+                }}
+                className="px-3 py-1.5 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-md transition-smooth text-sm font-medium"
+              >
+                Delete
               </button>
               <button
                 onClick={onClose}
@@ -941,7 +1414,7 @@ function TaskDetailModal({
             <p className="text-foreground/80 mb-4">No description</p>
           )}
           <div className="flex gap-2 mt-4" role="tablist" aria-label="Task detail tabs">
-            {(['details', 'comments', 'quality'] as const).map(tab => (
+            {(['details', 'comments', 'quality', 'costs'] as const).map(tab => (
               <button
                 key={tab}
                 role="tab"
@@ -952,50 +1425,88 @@ function TaskDetailModal({
                   activeTab === tab ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:bg-surface-2'
                 }`}
               >
-                {tab === 'details' ? 'Details' : tab === 'comments' ? 'Comments' : 'Quality Review'}
+                {tab === 'details' ? 'Details' : tab === 'comments' ? 'Comments' : tab === 'quality' ? 'Quality Review' : `Costs${taskCosts && taskCosts.total_cost > 0 ? ` ($${taskCosts.total_cost.toFixed(2)})` : ''}`}
               </button>
             ))}
           </div>
 
           {activeTab === 'details' && (
-            <div id="tabpanel-details" role="tabpanel" aria-label="Details" className="grid grid-cols-2 gap-4 text-sm mt-4">
-              {task.ticket_ref && (
+            <div id="tabpanel-details" role="tabpanel" aria-label="Details" className="mt-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 text-sm">
+                {task.ticket_ref && (
+                  <div>
+                    <span className="text-muted-foreground">Ticket:</span>
+                    <span className="text-foreground ml-2 font-mono">{task.ticket_ref}</span>
+                  </div>
+                )}
+                {resolvedProjectName && (
+                  <div>
+                    <span className="text-muted-foreground">Project:</span>
+                    <span className="text-foreground ml-2">{resolvedProjectName}</span>
+                  </div>
+                )}
                 <div>
-                  <span className="text-muted-foreground">Ticket:</span>
-                  <span className="text-foreground ml-2 font-mono">{task.ticket_ref}</span>
+                  <span className="text-muted-foreground">Status:</span>
+                  <span className="text-foreground ml-2">{task.status}</span>
                 </div>
-              )}
-              {resolvedProjectName && (
                 <div>
-                  <span className="text-muted-foreground">Project:</span>
-                  <span className="text-foreground ml-2">{resolvedProjectName}</span>
+                  <span className="text-muted-foreground">Priority:</span>
+                  <span className="text-foreground ml-2">{task.priority}</span>
                 </div>
-              )}
-              <div>
-                <span className="text-muted-foreground">Status:</span>
-                <span className="text-foreground ml-2">{task.status}</span>
+                <div>
+                  <span className="text-muted-foreground">Assigned to:</span>
+                  <span className="text-foreground ml-2 inline-flex items-center gap-1.5">
+                    {task.assigned_to ? (
+                      <>
+                        <AgentAvatar name={task.assigned_to} size="xs" />
+                        <span>{task.assigned_to}</span>
+                      </>
+                    ) : (
+                      <span>Unassigned</span>
+                    )}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Created:</span>
+                  <span className="text-foreground ml-2">{new Date(task.created_at * 1000).toLocaleDateString()}</span>
+                </div>
               </div>
-              <div>
-                <span className="text-muted-foreground">Priority:</span>
-                <span className="text-foreground ml-2">{task.priority}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Assigned to:</span>
-                <span className="text-foreground ml-2 inline-flex items-center gap-1.5">
-                  {task.assigned_to ? (
-                    <>
-                      <AgentAvatar name={task.assigned_to} size="xs" />
-                      <span>{task.assigned_to}</span>
-                    </>
-                  ) : (
-                    <span>Unassigned</span>
+
+              {/* Time Tracking Section */}
+              {(task.estimated_hours || task.actual_hours) ? (
+                <div className="bg-surface-1/40 border border-border rounded-lg p-3">
+                  <h5 className="text-sm font-medium text-foreground mb-2">⏱ Time Tracking</h5>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Estimated:</span>
+                      <span className="text-foreground ml-2">{task.estimated_hours || 0}h</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Actual:</span>
+                      <span className="text-foreground ml-2">{task.actual_hours || 0}h</span>
+                    </div>
+                  </div>
+                  {task.estimated_hours && task.estimated_hours > 0 && (
+                    <div className="mt-2">
+                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                        <span>Progress</span>
+                        <span>{Math.round(((task.actual_hours || 0) / task.estimated_hours) * 100)}%</span>
+                      </div>
+                      <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            (task.actual_hours || 0) > task.estimated_hours ? 'bg-red-500' : 'bg-emerald-500'
+                          }`}
+                          style={{ width: `${Math.min(100, ((task.actual_hours || 0) / task.estimated_hours) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
                   )}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Created:</span>
-                <span className="text-foreground ml-2">{new Date(task.created_at * 1000).toLocaleDateString()}</span>
-              </div>
+                </div>
+              ) : null}
+
+              {/* Dependencies Section */}
+              <TaskDependenciesSection taskId={task.id} allTasks={tasks} onUpdate={onUpdate} />
             </div>
           )}
 
@@ -1141,6 +1652,55 @@ function TaskDetailModal({
               </form>
             </div>
           )}
+
+          {activeTab === 'costs' && (
+            <div id="tabpanel-costs" role="tabpanel" aria-label="Cost Attribution" className="mt-6">
+              <h5 className="text-sm font-medium text-foreground mb-3">💰 Cost Attribution</h5>
+              {loadingCosts ? (
+                <div className="text-muted-foreground text-sm">Loading costs...</div>
+              ) : !taskCosts || taskCosts.total_cost === 0 ? (
+                <div className="text-muted-foreground/50 text-sm p-4 text-center">
+                  <span className="text-2xl block mb-2">💸</span>
+                  No cost entries attributed to this task yet.
+                  <p className="text-xs mt-1">Costs are logged when API calls include a task_id.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Total */}
+                  <div className="bg-surface-1/60 border border-border rounded-lg p-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground text-sm">Total Cost</span>
+                      <span className="text-xl font-bold text-foreground">${taskCosts.total_cost.toFixed(4)}</span>
+                    </div>
+                  </div>
+                  {/* Breakdown */}
+                  {taskCosts.breakdown.length > 0 && (
+                    <div className="bg-surface-1/40 border border-border rounded-lg p-3">
+                      <h6 className="text-xs font-medium text-muted-foreground mb-2">By Model/Service</h6>
+                      <div className="space-y-2">
+                        {taskCosts.breakdown.map((entry, i) => (
+                          <div key={i} className="flex justify-between items-center text-sm">
+                            <div className="flex items-center gap-2">
+                              <span className="text-foreground">{entry.model || entry.service}</span>
+                              <span className="text-[10px] text-muted-foreground/50">{entry.count}x</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-foreground font-mono">${entry.cost.toFixed(4)}</span>
+                              {(entry.tokens_in > 0 || entry.tokens_out > 0) && (
+                                <span className="text-[10px] text-muted-foreground/50 ml-2">
+                                  {((entry.tokens_in + entry.tokens_out) / 1000).toFixed(1)}k tok
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1202,9 +1762,9 @@ function CreateTaskModal({
   const dialogRef = useFocusTrap(onClose)
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="create-task-title" className="bg-card border border-border rounded-lg max-w-md w-full">
-        <form onSubmit={handleSubmit} className="p-6">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center z-50 md:p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="create-task-title" className="bg-card border border-border rounded-t-2xl md:rounded-lg max-w-md w-full max-h-[95vh] md:max-h-[90vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-4 md:p-6">
           <h3 id="create-task-title" className="text-xl font-bold text-foreground mb-4">Create New Task</h3>
           
           <div className="space-y-4">
@@ -1339,6 +1899,8 @@ function EditTaskModal({
     project_id: task.project_id ? String(task.project_id) : (projects[0]?.id ? String(projects[0].id) : ''),
     assigned_to: task.assigned_to || '',
     tags: task.tags ? task.tags.join(', ') : '',
+    estimated_hours: task.estimated_hours ? String(task.estimated_hours) : '',
+    actual_hours: task.actual_hours ? String(task.actual_hours) : '',
   })
   const mentionTargets = useMentionTargets()
 
@@ -1355,7 +1917,9 @@ function EditTaskModal({
           ...formData,
           project_id: formData.project_id ? Number(formData.project_id) : undefined,
           tags: formData.tags ? formData.tags.split(',').map(t => t.trim()) : [],
-          assigned_to: formData.assigned_to || undefined
+          assigned_to: formData.assigned_to || undefined,
+          estimated_hours: formData.estimated_hours ? parseFloat(formData.estimated_hours) : undefined,
+          actual_hours: formData.actual_hours ? parseFloat(formData.actual_hours) : undefined,
         })
       })
 
@@ -1374,9 +1938,9 @@ function EditTaskModal({
   const dialogRef = useFocusTrap(onClose)
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="edit-task-title" className="bg-card border border-border rounded-lg max-w-md w-full">
-        <form onSubmit={handleSubmit} className="p-6">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center z-50 md:p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="edit-task-title" className="bg-card border border-border rounded-t-2xl md:rounded-lg max-w-md w-full max-h-[95vh] md:max-h-[90vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-4 md:p-6">
           <h3 id="edit-task-title" className="text-xl font-bold text-foreground mb-4">Edit Task</h3>
 
           <div className="space-y-4">
@@ -1483,6 +2047,55 @@ function EditTaskModal({
                 placeholder="frontend, urgent, bug"
               />
             </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="edit-estimated-hours" className="block text-sm text-muted-foreground mb-1">Estimated Hours</label>
+                <input
+                  id="edit-estimated-hours"
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={formData.estimated_hours}
+                  onChange={(e) => setFormData(prev => ({ ...prev, estimated_hours: e.target.value }))}
+                  className="w-full bg-surface-1 text-foreground border border-border rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary/50"
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label htmlFor="edit-actual-hours" className="block text-sm text-muted-foreground mb-1">Actual Hours</label>
+                <input
+                  id="edit-actual-hours"
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={formData.actual_hours}
+                  onChange={(e) => setFormData(prev => ({ ...prev, actual_hours: e.target.value }))}
+                  className="w-full bg-surface-1 text-foreground border border-border rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary/50"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            {/* Time progress bar */}
+            {formData.estimated_hours && parseFloat(formData.estimated_hours) > 0 && (
+              <div>
+                <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                  <span>Time Progress</span>
+                  <span>{formData.actual_hours || '0'}h / {formData.estimated_hours}h</span>
+                </div>
+                <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      parseFloat(formData.actual_hours || '0') > parseFloat(formData.estimated_hours)
+                        ? 'bg-red-500'
+                        : 'bg-emerald-500'
+                    }`}
+                    style={{ width: `${Math.min(100, (parseFloat(formData.actual_hours || '0') / parseFloat(formData.estimated_hours)) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-3 mt-6">
@@ -1592,9 +2205,9 @@ function ProjectManagerModal({
   const dialogRef = useFocusTrap(onClose)
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="projects-title" className="bg-card border border-border rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 space-y-4">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center z-50 md:p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="projects-title" className="bg-card border border-border rounded-t-2xl md:rounded-lg max-w-2xl w-full max-h-[95vh] md:max-h-[90vh] overflow-y-auto">
+        <div className="p-4 md:p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h3 id="projects-title" className="text-xl font-bold text-foreground">Project Management</h3>
             <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-2xl">×</button>

@@ -57,13 +57,13 @@ export function MessageList() {
 
     const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120
     if (isNearBottom) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }
   }, [chatMessages])
 
   // Scroll to bottom on conversation change
   useEffect(() => {
-    bottomRef.current?.scrollIntoView()
+    bottomRef.current?.scrollIntoView({ block: 'nearest' })
   }, [activeConversation])
 
   // Retry a failed message

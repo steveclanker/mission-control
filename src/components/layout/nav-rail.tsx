@@ -29,16 +29,19 @@ const navGroups: NavGroup[] = [
       { id: 'office', label: 'Office', icon: <OfficeIcon />, priority: false },
       { id: 'social', label: 'Social', icon: <SocialIcon />, priority: true },
       { id: 'analytics', label: 'Analytics', icon: <AnalyticsIcon />, priority: true },
+
     ],
   },
   {
     id: 'observe',
     label: 'OBSERVE',
     items: [
+      { id: 'agent-monitor', label: 'Agent Monitor', icon: <AgentMonitorIcon />, priority: false },
       { id: 'activity', label: 'Activity', icon: <ActivityIcon />, priority: true },
       { id: 'logs', label: 'Logs', icon: <LogsIcon />, priority: false },
       { id: 'tokens', label: 'Tokens', icon: <TokensIcon />, priority: false },
       { id: 'agent-costs', label: 'Agent Costs', icon: <AgentCostsIcon />, priority: false },
+      { id: 'costs', label: 'Costs', icon: <CostsIcon />, priority: false },
       { id: 'memory', label: 'Memory', icon: <MemoryIcon />, priority: false },
     ],
   },
@@ -65,6 +68,7 @@ const navGroups: NavGroup[] = [
       { id: 'integrations', label: 'Integrations', icon: <IntegrationsIcon />, priority: false },
       { id: 'workspaces', label: 'Workspaces', icon: <SuperAdminIcon />, priority: false },
       { id: 'super-admin', label: 'Super Admin', icon: <SuperAdminIcon />, priority: false },
+      { id: 'security', label: 'Security', icon: <SecurityIcon />, priority: false },
       { id: 'settings', label: 'Settings', icon: <SettingsIcon />, priority: false },
     ],
   },
@@ -73,10 +77,24 @@ const navGroups: NavGroup[] = [
 // Flat list for mobile bar
 const allNavItems = navGroups.flatMap(g => g.items)
 
+// Nav items visible in client mode
+const clientVisibleIds = new Set(['overview', 'tasks', 'social', 'analytics'])
+
 export function NavRail() {
-  const { activeTab, connection, dashboardMode, sidebarExpanded, collapsedGroups, toggleSidebar, toggleGroup } = useMissionControl()
+  const { activeTab, connection, dashboardMode, sidebarExpanded, collapsedGroups, toggleSidebar, toggleGroup, viewMode } = useMissionControl()
   const navigateToPanel = useNavigateToPanel()
   const isLocal = dashboardMode === 'local'
+  const isClient = viewMode === 'client'
+
+  // Filter nav groups for client mode
+  const filteredNavGroups = isClient
+    ? navGroups
+        .map(group => ({
+          ...group,
+          items: group.items.filter(item => clientVisibleIds.has(item.id)),
+        }))
+        .filter(group => group.items.length > 0)
+    : navGroups
 
   // Keyboard shortcut: [ to toggle sidebar
   useEffect(() => {
@@ -125,7 +143,7 @@ export function NavRail() {
 
         {/* Nav groups */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden py-1">
-          {navGroups.map((group, groupIndex) => (
+          {filteredNavGroups.map((group, groupIndex) => (
             <div key={group.id}>
               {/* Divider between groups (not before first) */}
               {groupIndex > 0 && (
@@ -133,7 +151,7 @@ export function NavRail() {
               )}
 
               {/* Group header (expanded mode, only for groups with labels) */}
-              {sidebarExpanded && group.label && (
+              {sidebarExpanded && group.label && !isClient && (
                 <button
                   onClick={() => toggleGroup(group.id)}
                   className="w-full flex items-center justify-between px-3 mt-3 mb-1 group/header"
@@ -267,9 +285,12 @@ function MobileBottomBar({ activeTab, navigateToPanel }: {
   activeTab: string
   navigateToPanel: (tab: string) => void
 }) {
+  const { viewMode } = useMissionControl()
+  const isClient = viewMode === 'client'
   const [sheetOpen, setSheetOpen] = useState(false)
-  const priorityItems = allNavItems.filter(i => i.priority)
-  const nonPriorityIds = new Set(allNavItems.filter(i => !i.priority).map(i => i.id))
+  const visibleItems = isClient ? allNavItems.filter(i => clientVisibleIds.has(i.id)) : allNavItems
+  const priorityItems = isClient ? visibleItems : allNavItems.filter(i => i.priority)
+  const nonPriorityIds = new Set(visibleItems.filter(i => !priorityItems.includes(i)).map(i => i.id))
   const moreIsActive = nonPriorityIds.has(activeTab)
 
   return (
@@ -290,25 +311,27 @@ function MobileBottomBar({ activeTab, navigateToPanel }: {
               <span className="text-[10px] font-medium truncate">{item.label}</span>
             </button>
           ))}
-          {/* More button */}
-          <button
-            onClick={() => setSheetOpen(true)}
-            className={`flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-lg transition-smooth min-w-[48px] min-h-[48px] relative ${
-              moreIsActive ? 'text-primary' : 'text-muted-foreground'
-            }`}
-          >
-            <div className="w-5 h-5">
-              <svg viewBox="0 0 16 16" fill="currentColor">
-                <circle cx="4" cy="8" r="1.5" />
-                <circle cx="8" cy="8" r="1.5" />
-                <circle cx="12" cy="8" r="1.5" />
-              </svg>
-            </div>
-            <span className="text-[10px] font-medium">More</span>
-            {moreIsActive && (
-              <span className="absolute top-1.5 right-2.5 w-1.5 h-1.5 rounded-full bg-primary" />
-            )}
-          </button>
+          {/* More button (hidden in client mode) */}
+          {!isClient && (
+            <button
+              onClick={() => setSheetOpen(true)}
+              className={`flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-lg transition-smooth min-w-[48px] min-h-[48px] relative ${
+                moreIsActive ? 'text-primary' : 'text-muted-foreground'
+              }`}
+            >
+              <div className="w-5 h-5">
+                <svg viewBox="0 0 16 16" fill="currentColor">
+                  <circle cx="4" cy="8" r="1.5" />
+                  <circle cx="8" cy="8" r="1.5" />
+                  <circle cx="12" cy="8" r="1.5" />
+                </svg>
+              </div>
+              <span className="text-[10px] font-medium">More</span>
+              {moreIsActive && (
+                <span className="absolute top-1.5 right-2.5 w-1.5 h-1.5 rounded-full bg-primary" />
+              )}
+            </button>
+          )}
         </div>
       </nav>
 
@@ -647,6 +670,34 @@ function SocialIcon() {
       <circle cx="12" cy="4" r="2" />
       <circle cx="12" cy="12" r="2" />
       <path d="M5.8 7l4.4-2M5.8 9l4.4 2" />
+    </svg>
+  )
+}
+
+function AgentMonitorIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="6" />
+      <circle cx="8" cy="8" r="2" />
+      <path d="M8 2v2M8 12v2M2 8h2M12 8h2" />
+    </svg>
+  )
+}
+
+function CostsIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="6.5" />
+      <path d="M8 4v8M5.5 6.5h4a1.5 1.5 0 010 3H6.5" />
+    </svg>
+  )
+}
+
+function SecurityIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 1L2 4v4c0 4 2.5 6 6 7 3.5-1 6-3 6-7V4L8 1z" />
+      <path d="M6 8l2 2 3-3" />
     </svg>
   )
 }

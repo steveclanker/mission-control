@@ -88,6 +88,17 @@ interface StandupReport {
   }>
 }
 
+interface QuickStandup {
+  date: string
+  completed: Array<{ id: number; title: string; assigned_to?: string }>
+  in_progress: Array<{ id: number; title: string; assigned_to?: string }>
+  created: Array<{ id: number; title: string; assigned_to?: string }>
+  social_posts: number
+  agent_uptime: Record<string, string>
+  agent_activity: Array<{ actor: string; count: number }>
+  summary: string
+}
+
 interface StandupHistory {
   id: number
   date: string
@@ -98,11 +109,12 @@ interface StandupHistory {
 
 export function StandupPanel() {
   const [standupReport, setStandupReport] = useState<StandupReport | null>(null)
+  const [quickStandup, setQuickStandup] = useState<QuickStandup | null>(null)
   const [standupHistory, setStandupHistory] = useState<StandupHistory[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
-  const [view, setView] = useState<'current' | 'history'>('current')
+  const [view, setView] = useState<'quick' | 'current' | 'history'>('quick')
 
   // Generate standup report
   const generateStandup = async (date?: string) => {
@@ -140,10 +152,24 @@ export function StandupPanel() {
     }
   }
 
-  useEffect(() => {
-    if (view === 'history') {
-      fetchHistory()
+  // Auto-load quick standup
+  const fetchQuickStandup = async () => {
+    try {
+      setLoading(true)
+      const res = await fetch('/api/standup?generate=true')
+      if (!res.ok) throw new Error('Failed to fetch quick standup')
+      const data = await res.json()
+      setQuickStandup(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
     }
+  }
+
+  useEffect(() => {
+    if (view === 'quick') fetchQuickStandup()
+    if (view === 'history') fetchHistory()
   }, [view])
 
   // Format date for display
@@ -263,12 +289,20 @@ export function StandupPanel() {
           {/* View Toggle */}
           <div className="flex bg-secondary rounded-lg p-1">
             <button
+              onClick={() => setView('quick')}
+              className={`px-3 py-1 text-sm rounded-md transition-smooth ${
+                view === 'quick' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Today
+            </button>
+            <button
               onClick={() => setView('current')}
               className={`px-3 py-1 text-sm rounded-md transition-smooth ${
                 view === 'current' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Current
+              Full Report
             </button>
             <button
               onClick={() => setView('history')}
@@ -321,7 +355,143 @@ export function StandupPanel() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        {view === 'current' ? (
+        {view === 'quick' ? (
+          // Quick Today's Standup
+          quickStandup ? (
+            <div className="p-4 space-y-4">
+              {/* Summary card */}
+              <div className="bg-card rounded-lg p-4 border border-border">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl">📊</span>
+                  <h3 className="text-lg font-semibold text-foreground">Today&apos;s Standup — {quickStandup.date}</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">{quickStandup.summary}</p>
+              </div>
+
+              {/* Stats row */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-green-400">{quickStandup.completed.length}</div>
+                  <div className="text-xs text-green-400/70">Completed</div>
+                </div>
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-yellow-400">{quickStandup.in_progress.length}</div>
+                  <div className="text-xs text-yellow-400/70">In Progress</div>
+                </div>
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-blue-400">{quickStandup.created.length}</div>
+                  <div className="text-xs text-blue-400/70">Created</div>
+                </div>
+                <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-purple-400">{quickStandup.social_posts}</div>
+                  <div className="text-xs text-purple-400/70">Social Posts</div>
+                </div>
+              </div>
+
+              {/* Completed tasks */}
+              {quickStandup.completed.length > 0 && (
+                <div className="bg-card rounded-lg p-4 border border-border">
+                  <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <span>✅</span> Completed Today
+                  </h4>
+                  <div className="space-y-2">
+                    {quickStandup.completed.map(task => (
+                      <div key={task.id} className="flex items-center justify-between py-1.5 px-3 bg-green-900/10 rounded-md border-l-2 border-green-500">
+                        <span className="text-sm text-foreground">{task.title}</span>
+                        {task.assigned_to && <span className="text-xs text-muted-foreground">{task.assigned_to}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* In Progress */}
+              {quickStandup.in_progress.length > 0 && (
+                <div className="bg-card rounded-lg p-4 border border-border">
+                  <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <span>🔄</span> In Progress
+                  </h4>
+                  <div className="space-y-2">
+                    {quickStandup.in_progress.map(task => (
+                      <div key={task.id} className="flex items-center justify-between py-1.5 px-3 bg-yellow-900/10 rounded-md border-l-2 border-yellow-500">
+                        <span className="text-sm text-foreground">{task.title}</span>
+                        {task.assigned_to && <span className="text-xs text-muted-foreground">{task.assigned_to}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Created Today */}
+              {quickStandup.created.length > 0 && (
+                <div className="bg-card rounded-lg p-4 border border-border">
+                  <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <span>🆕</span> Created Today
+                  </h4>
+                  <div className="space-y-2">
+                    {quickStandup.created.map(task => (
+                      <div key={task.id} className="flex items-center justify-between py-1.5 px-3 bg-blue-900/10 rounded-md border-l-2 border-blue-500">
+                        <span className="text-sm text-foreground">{task.title}</span>
+                        {task.assigned_to && <span className="text-xs text-muted-foreground">{task.assigned_to}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Agent Activity */}
+              {(quickStandup.agent_activity.length > 0 || Object.keys(quickStandup.agent_uptime).length > 0) && (
+                <div className="bg-card rounded-lg p-4 border border-border">
+                  <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <span>🤖</span> Agent Activity
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {Object.entries(quickStandup.agent_uptime).map(([agent, uptime]) => (
+                      <div key={agent} className="bg-surface-1 rounded-md p-3 text-center">
+                        <div className="text-sm font-medium text-foreground">{agent}</div>
+                        <div className="text-xs text-muted-foreground mt-1">⏱ {uptime}</div>
+                      </div>
+                    ))}
+                    {quickStandup.agent_activity.map(a => (
+                      <div key={a.actor} className="bg-surface-1 rounded-md p-3 text-center">
+                        <div className="text-sm font-medium text-foreground">{a.actor}</div>
+                        <div className="text-xs text-muted-foreground mt-1">{a.count} actions</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Refresh */}
+              <div className="text-center">
+                <button
+                  onClick={fetchQuickStandup}
+                  disabled={loading}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-smooth"
+                >
+                  {loading ? 'Refreshing...' : '↻ Refresh'}
+                </button>
+              </div>
+            </div>
+          ) : loading ? (
+            <div className="flex items-center justify-center h-40">
+              <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary/30 border-t-primary" />
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <span className="text-4xl mb-3">📊</span>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Today&apos;s Standup</h3>
+              <p className="text-sm text-muted-foreground mb-4">View a quick summary of today&apos;s activity</p>
+              <button
+                onClick={fetchQuickStandup}
+                disabled={loading}
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-smooth"
+              >
+                Load Standup
+              </button>
+            </div>
+          )
+        ) : view === 'current' ? (
           // Current Standup View
           standupReport ? (
             <div className="p-4 space-y-6">

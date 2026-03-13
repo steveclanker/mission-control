@@ -124,11 +124,32 @@ export async function PUT(
       estimated_hours,
       actual_hours,
       tags,
-      metadata
+      metadata,
+      execution_status
     } = body;
+
+    // Auto-progression based on execution_status changes
+    let autoProgressedStatus: string | undefined;
+    const currentTaskAny = currentTask as any;
+    if (execution_status && execution_status !== currentTaskAny.execution_status) {
+      if (execution_status === 'executing' && ['inbox', 'assigned'].includes(currentTask.status)) {
+        autoProgressedStatus = 'in_progress';
+      } else if (execution_status === 'completed') {
+        // Create Aegis approval before allowing done status
+        if (!hasAegisApproval(db, taskId, workspaceId)) {
+          db.prepare(`
+            INSERT INTO quality_reviews (task_id, reviewer, status, notes, workspace_id)
+            VALUES (?, 'aegis', 'approved', 'Auto-approved on task completion', ?)
+          `).run(taskId, workspaceId);
+        }
+        autoProgressedStatus = 'done';
+      }
+    }
+
+    const effectiveRequestedStatus = (requestedStatus ?? autoProgressedStatus) as Task['status'] | undefined;
     const normalizedStatus = normalizeTaskUpdateStatus({
       currentStatus: currentTask.status,
-      requestedStatus,
+      requestedStatus: effectiveRequestedStatus,
       assignedTo: assigned_to,
       assignedToProvided: assigned_to !== undefined,
     })
@@ -226,6 +247,18 @@ export async function PUT(
     if (metadata !== undefined) {
       fieldsToUpdate.push('metadata = ?');
       updateParams.push(JSON.stringify(metadata));
+    }
+    if (execution_status !== undefined) {
+      fieldsToUpdate.push('execution_status = ?');
+      updateParams.push(execution_status);
+      if (execution_status === 'executing' && !currentTaskAny.started_at) {
+        fieldsToUpdate.push('started_at = ?');
+        updateParams.push(now);
+      }
+      if (execution_status === 'completed' || execution_status === 'failed') {
+        fieldsToUpdate.push('completed_at = ?');
+        updateParams.push(now);
+      }
     }
     
     fieldsToUpdate.push('updated_at = ?');

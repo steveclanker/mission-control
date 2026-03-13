@@ -604,23 +604,23 @@ export function useWebSocket() {
             connectRef.current(reconnectUrl.current, authTokenRef.current)
           }, timeout)
         } else {
-          log.error('Max reconnection attempts reached')
+          log.warn('Max reconnection attempts reached')
           addLog({
-            id: `error-${Date.now()}`,
+            id: `ws-max-${Date.now()}`,
             timestamp: Date.now(),
-            level: 'error',
+            level: 'debug',
             source: 'websocket',
-            message: 'Max reconnection attempts reached. Please reconnect manually.'
+            message: 'Gateway not reachable — this is normal when accessing remotely.'
           })
         }
       }
 
       ws.onerror = (error) => {
-        log.error('WebSocket error:', error)
+        log.debug('WebSocket error:', error)
         addLog({
           id: `error-${Date.now()}`,
           timestamp: Date.now(),
-          level: 'error',
+          level: 'debug',
           source: 'websocket',
           message: `WebSocket error occurred`
         })

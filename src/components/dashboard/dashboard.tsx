@@ -100,13 +100,13 @@ export function Dashboard() {
 
   if (isLoading) {
     return (
-      <div className="p-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="p-3 md:p-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 mb-4 md:mb-6">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-24 rounded-lg shimmer" />
+            <div key={i} className="h-20 md:h-24 rounded-lg shimmer" />
           ))}
         </div>
-        <div className="grid lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
           {[...Array(6)].map((_, i) => (
             <div key={i} className="h-40 rounded-lg shimmer" />
           ))}
@@ -120,9 +120,9 @@ export function Dashboard() {
     : null
 
   return (
-    <div className="p-5 space-y-5">
+    <div className="p-3 md:p-5 space-y-4 md:space-y-5">
       {/* Top Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3">
         {isLocal ? (
           <>
             <div className="cursor-pointer" onClick={() => navigateToPanel('sessions')}>
@@ -203,7 +203,7 @@ export function Dashboard() {
       </div>
 
       {/* Three-column layout */}
-      <div className="grid lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
         {/* System Health */}
         <div className="panel">
           <div className="panel-header">
@@ -444,7 +444,7 @@ export function Dashboard() {
       </div>
 
       {/* Bottom two-column: Sessions + Logs */}
-      <div className="grid lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
         {/* Sessions */}
         <div className="panel">
           <div className="panel-header">
@@ -482,7 +482,7 @@ export function Dashboard() {
             <h3 className="text-sm font-semibold text-foreground">Recent Logs</h3>
           </div>
           <div className="divide-y divide-border/50 max-h-56 overflow-y-auto">
-            {logs.slice(0, 8).map((log) => (
+            {logs.filter(l => l.level !== 'debug').slice(0, 8).map((log) => (
               <div key={log.id} className="px-4 py-2 hover:bg-secondary/30 transition-smooth">
                 <div className="flex items-start gap-2">
                   <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${
@@ -512,7 +512,7 @@ export function Dashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
         {!isLocal && (
           <QuickAction label="Spawn Agent" desc="Launch sub-agent" tab="spawn" icon={<SpawnActionIcon />} onNavigate={navigateToPanel} />
         )}
@@ -547,13 +547,13 @@ function MetricCard({ label, value, total, subtitle, icon, color }: {
   }
 
   return (
-    <div className={`rounded-lg border p-3.5 ${colorMap[color]}`}>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium opacity-80">{label}</span>
-        <div className="w-5 h-5 opacity-60">{icon}</div>
+    <div className={`rounded-lg border p-2.5 md:p-3.5 ${colorMap[color]}`}>
+      <div className="flex items-center justify-between mb-1.5 md:mb-2">
+        <span className="text-[11px] md:text-xs font-medium opacity-80">{label}</span>
+        <div className="w-4 h-4 md:w-5 md:h-5 opacity-60">{icon}</div>
       </div>
       <div className="flex items-baseline gap-1">
-        <span className="text-2xl font-bold font-mono-tight">{value}</span>
+        <span className="text-xl md:text-2xl font-bold font-mono-tight">{value}</span>
         {total != null && (
           <span className="text-xs opacity-50 font-mono-tight">/ {total}</span>
         )}

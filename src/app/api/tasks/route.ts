@@ -331,6 +331,37 @@ export async function PUT(request: NextRequest) {
 
         updateStmt.run(task.status, now, task.id, workspaceId);
 
+        // Auto-set started_at when moving to in_progress
+        if (task.status === 'in_progress' && !(oldTask as any).started_at) {
+          db.prepare('UPDATE tasks SET started_at = ? WHERE id = ? AND workspace_id = ?').run(now, task.id, workspaceId);
+        }
+
+        // Auto-calculate actual_hours when moving to done
+        if (task.status === 'done' && !(oldTask as any).actual_hours && (oldTask as any).started_at) {
+          const elapsedSeconds = now - (oldTask as any).started_at;
+          const elapsedHours = Math.round((elapsedSeconds / 3600) * 10) / 10; // 1 decimal
+          db.prepare('UPDATE tasks SET actual_hours = ?, completed_at = ? WHERE id = ? AND workspace_id = ?').run(elapsedHours, now, task.id, workspaceId);
+        }
+
+        // Check for unfinished dependencies when moving to in_progress
+        if (task.status === 'in_progress') {
+          try {
+            const unfinishedDeps = db.prepare(`
+              SELECT COUNT(*) as cnt FROM task_dependencies td
+              JOIN tasks t ON t.id = td.depends_on_id
+              WHERE td.task_id = ? AND td.workspace_id = ? AND t.status != 'done'
+            `).get(task.id, workspaceId) as { cnt: number } | undefined;
+            if (unfinishedDeps && unfinishedDeps.cnt > 0) {
+              throw new Error(`Task ${task.id} has unfinished dependencies`);
+            }
+          } catch (depErr) {
+            if (depErr instanceof Error && depErr.message.includes('unfinished dependencies')) {
+              throw depErr;
+            }
+            // task_dependencies table may not exist yet, ignore
+          }
+        }
+
         // Log status change if different
         if (oldTask && oldTask.status !== task.status) {
           db_helpers.logActivity(
@@ -361,7 +392,7 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     logger.error({ err: error }, 'PUT /api/tasks error');
     const message = error instanceof Error ? error.message : 'Failed to update tasks'
-    if (message.includes('Aegis approval required')) {
+    if (message.includes('Aegis approval required') || message.includes('unfinished dependencies')) {
       return NextResponse.json({ error: message }, { status: 403 });
     }
     return NextResponse.json({ error: 'Failed to update tasks' }, { status: 500 });

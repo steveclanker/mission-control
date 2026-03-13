@@ -41,7 +41,11 @@ export const createTaskSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).default({} as Record<string, unknown>),
 })
 
-export const updateTaskSchema = createTaskSchema.partial()
+export const updateTaskSchema = createTaskSchema.partial().extend({
+  // Override status to remove .default('inbox') — for updates, missing status must be undefined (not defaulted)
+  status: z.enum(['inbox', 'assigned', 'in_progress', 'review', 'quality_review', 'done']).optional(),
+  execution_status: z.enum(['pending', 'executing', 'completed', 'failed', 'blocked']).optional(),
+})
 
 export const createAgentSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),

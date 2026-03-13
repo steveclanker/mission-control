@@ -246,9 +246,9 @@ export function AgentSquadPanelPhase3() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex justify-between items-center p-4 border-b border-border flex-shrink-0">
-        <div className="flex items-center gap-4">
-          <h2 className="text-xl font-bold text-foreground">Agent Squad</h2>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 p-3 md:p-4 border-b border-border flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 md:gap-4">
+          <h2 className="text-lg md:text-xl font-bold text-foreground">Agent Squad</h2>
           
           {/* Status Summary */}
           <div className="flex gap-2 text-sm">
@@ -263,13 +263,13 @@ export function AgentSquadPanelPhase3() {
           {/* Active Heartbeats Indicator */}
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></div>
-            <span className="text-sm text-muted-foreground">
-              {agents.filter(hasRecentHeartbeat).length} active heartbeats
+            <span className="text-xs md:text-sm text-muted-foreground">
+              {agents.filter(hasRecentHeartbeat).length} active
             </span>
           </div>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full md:w-auto">
           <button
             onClick={() => setAutoRefresh(!autoRefresh)}
             className={`px-3 py-1.5 text-sm rounded-md transition-smooth ${
@@ -283,19 +283,19 @@ export function AgentSquadPanelPhase3() {
           <button
             onClick={syncFromConfig}
             disabled={syncing}
-            className="px-3 py-2 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-md hover:bg-cyan-500/30 disabled:opacity-50 transition-smooth text-sm"
+            className="hidden sm:inline-flex px-3 py-2 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-md hover:bg-cyan-500/30 disabled:opacity-50 transition-smooth text-sm"
           >
-            {syncing ? 'Syncing...' : 'Sync from Config'}
+            {syncing ? 'Syncing...' : 'Sync'}
           </button>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-smooth text-sm font-medium"
+            className="flex-1 sm:flex-none px-3 md:px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-smooth text-sm font-medium"
           >
             + Add Agent
           </button>
           <button
             onClick={fetchAgents}
-            className="px-4 py-2 bg-secondary text-muted-foreground rounded-md hover:bg-surface-2 transition-smooth text-sm"
+            className="px-3 md:px-4 py-2 bg-secondary text-muted-foreground rounded-md hover:bg-surface-2 transition-smooth text-sm"
           >
             Refresh
           </button>
@@ -323,7 +323,7 @@ export function AgentSquadPanelPhase3() {
       )}
 
       {/* Agent Grid */}
-      <div className="flex-1 p-4 overflow-y-auto">
+      <div className="flex-1 p-3 md:p-4 overflow-y-auto">
         {agents.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground/50">
             <div className="w-12 h-12 rounded-full bg-surface-2 flex items-center justify-center mb-3">
@@ -642,11 +642,11 @@ function AgentDetailModalPhase3({
       onClick={onClose}
     >
       <div
-        className="bg-card border border-border/80 rounded-xl shadow-2xl shadow-black/40 max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+        className="bg-card border border-border/80 rounded-t-2xl md:rounded-xl shadow-2xl shadow-black/40 max-w-5xl w-full max-h-[95vh] md:max-h-[90vh] flex flex-col overflow-hidden self-end md:self-center"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="p-6 border-b border-border bg-gradient-to-r from-surface-1 via-card to-surface-1">
+        <div className="p-4 md:p-6 border-b border-border bg-gradient-to-r from-surface-1 via-card to-surface-1">
           <div className="flex justify-between items-start gap-4">
             <div className="flex items-start gap-3 min-w-0">
               <AgentAvatar name={agent.name} size="md" />
@@ -681,7 +681,7 @@ function AgentDetailModalPhase3({
           </div>
 
           {/* Tab Navigation */}
-          <div className="flex gap-1.5 mt-5 overflow-x-auto pb-1">
+          <div className="flex gap-1.5 mt-4 md:mt-5 overflow-x-auto pb-1 -mx-1 px-1">
             {tabs.map(tab => (
               <button
                 key={tab.id}

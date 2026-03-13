@@ -842,6 +842,24 @@ const migrations: Migration[] = [
       db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_metrics_agent_date ON agent_metrics(agent_id, date)`)
       db.exec(`CREATE INDEX IF NOT EXISTS idx_task_timing_task_phase ON task_timing(task_id, phase)`)
     }
+  },
+  {
+    id: '005_chat_messages',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS chat_messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          sender TEXT NOT NULL,
+          content TEXT NOT NULL,
+          channel TEXT DEFAULT 'general',
+          metadata TEXT,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          workspace_id INTEGER NOT NULL DEFAULT 1
+        )
+      `)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_chat_messages_channel ON chat_messages(channel, created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_chat_messages_workspace ON chat_messages(workspace_id)`)
+    }
   }
 ]
 

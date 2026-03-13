@@ -399,6 +399,10 @@ interface MissionControlStore {
   currentUser: CurrentUser | null
   setCurrentUser: (user: CurrentUser | null) => void
 
+  // View Mode (admin vs client portal)
+  viewMode: 'admin' | 'client'
+  setViewMode: (mode: 'admin' | 'client') => void
+
   // UI State
   activeTab: string
   sidebarExpanded: boolean
@@ -578,6 +582,16 @@ export const useMissionControl = create<MissionControlStore>()(
     // Auth
     currentUser: null,
     setCurrentUser: (user) => set({ currentUser: user }),
+
+    // View Mode
+    viewMode: (() => {
+      if (typeof window === 'undefined') return 'admin' as const
+      try { return (localStorage.getItem('mc-view-mode') as 'admin' | 'client') || 'admin' } catch { return 'admin' as const }
+    })(),
+    setViewMode: (mode) => {
+      try { localStorage.setItem('mc-view-mode', mode) } catch {}
+      set({ viewMode: mode })
+    },
 
     // UI State — sidebar & layout persistence
     activeTab: 'overview',

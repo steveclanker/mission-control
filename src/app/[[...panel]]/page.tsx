@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { NavRail } from '@/components/layout/nav-rail'
 import { HeaderBar } from '@/components/layout/header-bar'
@@ -34,11 +34,17 @@ import { OfficePanel } from '@/components/panels/office-panel'
 import { GitHubSyncPanel } from '@/components/panels/github-sync-panel'
 import { SocialMediaPanel } from '@/components/panels/social-media-panel'
 import { AnalyticsPanel } from '@/components/panels/analytics-panel'
+
+import { AgentMonitorPanel } from '@/components/panels/agent-monitor-panel'
+import { SecurityAuditPanel } from '@/components/panels/security-audit-panel'
+import { CostTrackerPanel } from '@/components/panels/cost-tracker-panel'
+import { ClientDashboard } from '@/components/dashboard/client-dashboard'
 import { ChatPanel } from '@/components/chat/chat-panel'
+import { ApprovalOverlay } from '@/components/approval-overlay'
+import { OnboardingWizard } from '@/components/onboarding/onboarding-wizard'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { LocalModeBanner } from '@/components/layout/local-mode-banner'
-import { UpdateBanner } from '@/components/layout/update-banner'
-import { PromoBanner } from '@/components/layout/promo-banner'
+
 import { useWebSocket } from '@/lib/websocket'
 import { useServerEvents } from '@/lib/use-server-events'
 import { useMissionControl } from '@/store'
@@ -46,15 +52,46 @@ import { useMissionControl } from '@/store'
 export default function Home() {
   const router = useRouter()
   const { connect } = useWebSocket()
-  const { activeTab, setActiveTab, setCurrentUser, setDashboardMode, setGatewayAvailable, setSubscription, setUpdateAvailable, liveFeedOpen, toggleLiveFeed } = useMissionControl()
+  const { activeTab, setActiveTab, setCurrentUser, setDashboardMode, setGatewayAvailable, setSubscription, setUpdateAvailable, liveFeedOpen, toggleLiveFeed, viewMode } = useMissionControl()
 
   // Sync URL → Zustand activeTab
   const pathname = usePathname()
   const panelFromUrl = pathname === '/' ? 'overview' : pathname.slice(1)
 
+  const mainRef = useRef<HTMLElement>(null)
+  const scrollGuardRef = useRef(true)
+
   useEffect(() => {
     setActiveTab(panelFromUrl)
+    // Reset scroll to top on tab change
+    if (mainRef.current) mainRef.current.scrollTop = 0
   }, [panelFromUrl, setActiveTab])
+
+  // Nuclear scroll guard: force scroll to top for 3 seconds after mount
+  // Prevents any async effect (SSE, chat, logs) from hijacking scroll on mobile
+  useEffect(() => {
+    scrollGuardRef.current = true
+    const el = mainRef.current
+    if (!el) return
+
+    const forceTop = () => {
+      if (scrollGuardRef.current && el.scrollTop > 0) {
+        el.scrollTop = 0
+      }
+    }
+
+    // Check repeatedly for 3 seconds
+    const interval = setInterval(forceTop, 100)
+    const timeout = setTimeout(() => {
+      scrollGuardRef.current = false
+      clearInterval(interval)
+    }, 3000)
+
+    return () => {
+      clearInterval(interval)
+      clearTimeout(timeout)
+    }
+  }, [panelFromUrl])
 
   // Connect to SSE for real-time local DB events (tasks, agents, chat, etc.)
   useServerEvents()
@@ -159,9 +196,8 @@ export default function Home() {
       <div className="flex-1 flex flex-col min-w-0">
         <HeaderBar />
         <LocalModeBanner />
-        <UpdateBanner />
-        <PromoBanner />
-        <main id="main-content" className="flex-1 overflow-auto pb-16 md:pb-0" role="main">
+
+        <main ref={mainRef} id="main-content" className="flex-1 overflow-auto pb-16 md:pb-0" role="main">
           <div aria-live="polite">
             <ErrorBoundary key={activeTab}>
               <ContentRouter tab={activeTab} />
@@ -170,15 +206,15 @@ export default function Home() {
         </main>
       </div>
 
-      {/* Right: Live feed (hidden on mobile) */}
-      {liveFeedOpen && (
+      {/* Right: Live feed (hidden on mobile and in client mode) */}
+      {liveFeedOpen && viewMode !== 'client' && (
         <div className="hidden lg:flex h-full">
           <LiveFeed />
         </div>
       )}
 
       {/* Floating button to reopen LiveFeed when closed */}
-      {!liveFeedOpen && (
+      {!liveFeedOpen && viewMode !== 'client' && (
         <button
           onClick={toggleLiveFeed}
           className="hidden lg:flex fixed right-0 top-1/2 -translate-y-1/2 z-30 w-6 h-12 items-center justify-center bg-card border border-r-0 border-border rounded-l-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all duration-200"
@@ -190,23 +226,35 @@ export default function Home() {
         </button>
       )}
 
-      {/* Chat panel overlay */}
-      <ChatPanel />
+      {/* Chat panel overlay — hidden on mobile to prevent auto-scroll */}
+      <div className="hidden md:block">
+        <ChatPanel />
+      </div>
+
+      {/* Approval overlay */}
+      <ApprovalOverlay />
+
+      {/* Onboarding wizard (first visit) */}
+      <OnboardingWizard />
     </div>
   )
 }
 
 function ContentRouter({ tab }: { tab: string }) {
-  const { dashboardMode } = useMissionControl()
+  const { dashboardMode, viewMode } = useMissionControl()
   const isLocal = dashboardMode === 'local'
+  const isClient = viewMode === 'client'
 
   switch (tab) {
     case 'overview':
+      if (isClient) {
+        return <ClientDashboard />
+      }
       return (
         <>
           <Dashboard />
           {!isLocal && (
-            <div className="mt-4 mx-4 mb-4 rounded-xl border border-border bg-card overflow-hidden">
+            <div className="hidden md:block mt-4 mx-4 mb-4 rounded-xl border border-border bg-card overflow-hidden">
               <AgentCommsPanel />
             </div>
           )}
@@ -220,7 +268,7 @@ function ContentRouter({ tab }: { tab: string }) {
           <OrchestrationBar />
           <AgentSquadPanelPhase3 />
           {!isLocal && (
-            <div className="mt-4 mx-4 mb-4 rounded-xl border border-border bg-card overflow-hidden">
+            <div className="hidden md:block mt-4 mx-4 mb-4 rounded-xl border border-border bg-card overflow-hidden">
               <AgentCommsPanel />
             </div>
           )}
@@ -272,6 +320,13 @@ function ContentRouter({ tab }: { tab: string }) {
       return <SocialMediaPanel />
     case 'analytics':
       return <AnalyticsPanel />
+    case 'agent-monitor':
+      return <AgentMonitorPanel />
+
+    case 'security':
+      return <SecurityAuditPanel />
+    case 'costs':
+      return <CostTrackerPanel />
     case 'super-admin':
       return <SuperAdminPanel />
     case 'workspaces':

@@ -215,8 +215,11 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * GET /api/standup/history - Get previous standup reports
- * Query params: limit, offset
+ * GET /api/standup - Get standup report
+ * Query params:
+ *   generate=true — generate today's report on the fly
+ *   date=YYYY-MM-DD — specific date (defaults to today)
+ *   limit, offset — for history mode (when generate is not set)
  */
 export async function GET(request: NextRequest) {
   const auth = requireRole(request, 'viewer');
@@ -226,7 +229,88 @@ export async function GET(request: NextRequest) {
     const db = getDatabase();
     const { searchParams } = new URL(request.url);
     const workspaceId = auth.user.workspace_id ?? 1;
+    const generate = searchParams.get('generate') === 'true';
 
+    if (generate) {
+      // Generate today's standup report on the fly
+      const targetDate = searchParams.get('date') || new Date().toISOString().split('T')[0];
+      const startOfDay = Math.floor(new Date(`${targetDate}T00:00:00Z`).getTime() / 1000);
+      const endOfDay = Math.floor(new Date(`${targetDate}T23:59:59Z`).getTime() / 1000);
+      const now = Math.floor(Date.now() / 1000);
+
+      // Tasks completed today
+      const completed = db.prepare(`
+        SELECT id, title, status, assigned_to, updated_at
+        FROM tasks WHERE workspace_id = ? AND status = 'done'
+        AND updated_at BETWEEN ? AND ?
+        ORDER BY updated_at DESC
+      `).all(workspaceId, startOfDay, endOfDay) as any[];
+
+      // Tasks in progress
+      const inProgress = db.prepare(`
+        SELECT id, title, status, assigned_to, created_at
+        FROM tasks WHERE workspace_id = ? AND status = 'in_progress'
+        ORDER BY created_at ASC
+      `).all(workspaceId) as any[];
+
+      // Tasks created today
+      const created = db.prepare(`
+        SELECT id, title, status, assigned_to, created_at
+        FROM tasks WHERE workspace_id = ? AND created_at BETWEEN ? AND ?
+        ORDER BY created_at DESC
+      `).all(workspaceId, startOfDay, endOfDay) as any[];
+
+      // Agent activity count
+      const agentActivity = db.prepare(`
+        SELECT actor, COUNT(*) as count
+        FROM activities WHERE workspace_id = ? AND created_at BETWEEN ? AND ?
+        GROUP BY actor
+      `).all(workspaceId, startOfDay, endOfDay) as any[];
+
+      // Agent uptime (based on last_seen vs start of day)
+      const agents = db.prepare(`
+        SELECT name, status, last_seen FROM agents WHERE workspace_id = ?
+      `).all(workspaceId) as any[];
+
+      const agentUptime: Record<string, string> = {};
+      for (const agent of agents) {
+        if (agent.last_seen && agent.last_seen > startOfDay) {
+          const activeSeconds = Math.min(agent.last_seen, now) - Math.max(startOfDay, agent.last_seen - 3600);
+          const hours = Math.floor(Math.max(0, activeSeconds) / 3600);
+          const minutes = Math.floor((Math.max(0, activeSeconds) % 3600) / 60);
+          agentUptime[agent.name] = `${hours}h ${minutes}m`;
+        }
+      }
+
+      // Social posts (check late cache table if exists)
+      let socialPosts = 0;
+      try {
+        const postCount = db.prepare(`
+          SELECT COUNT(*) as count FROM late_posts 
+          WHERE workspace_id = ? AND created_at BETWEEN ? AND ?
+        `).get(workspaceId, startOfDay, endOfDay) as { count: number } | undefined;
+        socialPosts = postCount?.count || 0;
+      } catch {
+        // table may not exist
+      }
+
+      const summary = `Completed ${completed.length} tasks, ${inProgress.length} in progress` +
+        (socialPosts > 0 ? `, ${socialPosts} social posts published` : '') +
+        (created.length > 0 ? `, ${created.length} new tasks created` : '');
+
+      return NextResponse.json({
+        date: targetDate,
+        completed: completed.map(t => ({ id: t.id, title: t.title, assigned_to: t.assigned_to })),
+        in_progress: inProgress.map(t => ({ id: t.id, title: t.title, assigned_to: t.assigned_to })),
+        created: created.map(t => ({ id: t.id, title: t.title, assigned_to: t.assigned_to })),
+        social_posts: socialPosts,
+        agent_uptime: agentUptime,
+        agent_activity: agentActivity,
+        summary,
+      });
+    }
+
+    // History mode
     const limit = Math.min(parseInt(searchParams.get('limit') || '10'), 200);
     const offset = parseInt(searchParams.get('offset') || '0');
     
@@ -260,7 +344,7 @@ export async function GET(request: NextRequest) {
       limit
     });
   } catch (error) {
-    logger.error({ err: error }, 'GET /api/standup/history error');
-    return NextResponse.json({ error: 'Failed to fetch standup history' }, { status: 500 });
+    logger.error({ err: error }, 'GET /api/standup error');
+    return NextResponse.json({ error: 'Failed to fetch standup' }, { status: 500 });
   }
 }

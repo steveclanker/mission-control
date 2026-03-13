@@ -7,6 +7,7 @@ import { useWebSocket } from '@/lib/websocket'
 import { useNavigateToPanel } from '@/lib/navigation'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { DigitalClock } from '@/components/ui/digital-clock'
+import { NotificationBell } from '@/components/notification-bell'
 import { APP_VERSION } from '@/lib/version'
 
 interface SearchResult {
@@ -19,7 +20,7 @@ interface SearchResult {
 }
 
 export function HeaderBar() {
-  const { activeTab, connection, sessions, chatPanelOpen, setChatPanelOpen, notifications, unreadNotificationCount, currentUser, setCurrentUser } = useMissionControl()
+  const { activeTab, connection, sessions, chatPanelOpen, setChatPanelOpen, notifications, unreadNotificationCount, currentUser, setCurrentUser, viewMode, setViewMode } = useMissionControl()
   const { isConnected, reconnect } = useWebSocket()
   const navigateToPanel = useNavigateToPanel()
 
@@ -163,6 +164,30 @@ export function HeaderBar() {
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
+        {/* View Mode Toggle */}
+        <div className="flex items-center gap-0.5 bg-secondary/60 rounded-lg p-0.5">
+          <button
+            onClick={() => setViewMode('admin')}
+            className={`px-2 md:px-2.5 py-1 rounded-md text-[10px] md:text-xs font-medium transition-all duration-200 ${
+              viewMode === 'admin'
+                ? 'bg-violet-600 text-white shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Admin
+          </button>
+          <button
+            onClick={() => setViewMode('client')}
+            className={`px-2 md:px-2.5 py-1 rounded-md text-[10px] md:text-xs font-medium transition-all duration-200 ${
+              viewMode === 'client'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Client
+          </button>
+        </div>
+
         <div className="hidden md:block">
           <DigitalClock />
         </div>
@@ -189,18 +214,8 @@ export function HeaderBar() {
           Chat
         </button>
 
-        {/* Notifications */}
-        <button
-          onClick={() => navigateToPanel('notifications')}
-          className="h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-smooth flex items-center justify-center relative"
-        >
-          <BellIcon />
-          {unreadNotificationCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-primary text-primary-foreground text-2xs flex items-center justify-center font-medium">
-              {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
-            </span>
-          )}
-        </button>
+        {/* Notifications dropdown */}
+        <NotificationBell />
 
         <ThemeToggle />
 
