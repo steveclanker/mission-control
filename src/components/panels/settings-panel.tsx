@@ -16,12 +16,13 @@ interface Setting {
 
 const categoryLabels: Record<string, { label: string; icon: string; description: string }> = {
   general: { label: 'General', icon: '⚙', description: 'Core Mission Control settings' },
+  notifications: { label: 'Notifications', icon: '🔔', description: 'Telegram push notification settings' },
   retention: { label: 'Data Retention', icon: '🗄', description: 'How long data is kept before cleanup' },
   gateway: { label: 'Gateway', icon: '🔌', description: 'OpenClaw gateway connection settings' },
   custom: { label: 'Custom', icon: '🔧', description: 'User-defined settings' },
 }
 
-const categoryOrder = ['general', 'retention', 'gateway', 'custom']
+const categoryOrder = ['general', 'notifications', 'retention', 'gateway', 'custom']
 
 export function SettingsPanel() {
   const { currentUser } = useMissionControl()

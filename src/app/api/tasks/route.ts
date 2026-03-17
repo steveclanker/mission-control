@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger';
 import { validateBody, createTaskSchema, bulkUpdateTaskStatusSchema } from '@/lib/validation';
 import { resolveMentionRecipients } from '@/lib/mentions';
 import { normalizeTaskCreateStatus } from '@/lib/task-status';
+import { notifyTaskCreated, notifyTaskCompleted, notifyTaskFailed } from '@/lib/notify';
 
 function formatTicketRef(prefix?: string | null, num?: number | null): string | undefined {
   if (!prefix || typeof num !== 'number' || !Number.isFinite(num) || num <= 0) return undefined
@@ -286,6 +287,9 @@ export async function POST(request: NextRequest) {
     // Broadcast to SSE clients
     eventBus.broadcast('task.created', parsedTask);
 
+    // Push notification
+    notifyTaskCreated(title, priority).catch(() => {});
+
     return NextResponse.json({ task: parsedTask }, { status: 201 });
   } catch (error) {
     logger.error({ err: error }, 'POST /api/tasks error');
@@ -386,6 +390,17 @@ export async function PUT(request: NextRequest) {
         status: task.status,
         updated_at: Math.floor(Date.now() / 1000),
       });
+
+      // Push notifications for status changes
+      if (task.status === 'done' || task.status === 'failed') {
+        try {
+          const taskRow = db.prepare('SELECT title FROM tasks WHERE id = ? AND workspace_id = ?').get(task.id, workspaceId) as { title: string } | undefined;
+          if (taskRow) {
+            if (task.status === 'done') notifyTaskCompleted(taskRow.title).catch(() => {});
+            else notifyTaskFailed(taskRow.title).catch(() => {});
+          }
+        } catch { /* best effort */ }
+      }
     }
 
     return NextResponse.json({ success: true, updated: tasks.length });

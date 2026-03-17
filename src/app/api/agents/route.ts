@@ -11,6 +11,7 @@ import { validateBody, createAgentSchema } from '@/lib/validation';
 import { runOpenClaw } from '@/lib/command';
 import { config as appConfig } from '@/lib/config';
 import { resolveWithin } from '@/lib/paths';
+import { notifyAgentOnline, notifyAgentOffline } from '@/lib/notify';
 import path from 'node:path';
 
 /**
@@ -387,6 +388,10 @@ export async function PUT(request: NextRequest) {
           },
           workspaceId
         );
+
+        // Push notification for agent status changes
+        if (status === 'offline') notifyAgentOffline(name).catch(() => {});
+        else if (status === 'online') notifyAgentOnline(name).catch(() => {});
       }
 
       // Broadcast update to SSE clients

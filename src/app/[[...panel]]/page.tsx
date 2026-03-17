@@ -33,7 +33,8 @@ import { SuperAdminPanel } from '@/components/panels/super-admin-panel'
 import { OfficePanel } from '@/components/panels/office-panel'
 import { GitHubSyncPanel } from '@/components/panels/github-sync-panel'
 import { SocialMediaPanel } from '@/components/panels/social-media-panel'
-import { AnalyticsPanel } from '@/components/panels/analytics-panel'
+
+import { DailySummaryPanel } from '@/components/panels/daily-summary-panel'
 
 import { AgentMonitorPanel } from '@/components/panels/agent-monitor-panel'
 import { SecurityAuditPanel } from '@/components/panels/security-audit-panel'
@@ -41,7 +42,7 @@ import { CostTrackerPanel } from '@/components/panels/cost-tracker-panel'
 import { ClientDashboard } from '@/components/dashboard/client-dashboard'
 import { ChatPanel } from '@/components/chat/chat-panel'
 import { ApprovalOverlay } from '@/components/approval-overlay'
-import { OnboardingWizard } from '@/components/onboarding/onboarding-wizard'
+
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { LocalModeBanner } from '@/components/layout/local-mode-banner'
 
@@ -234,8 +235,7 @@ export default function Home() {
       {/* Approval overlay */}
       <ApprovalOverlay />
 
-      {/* Onboarding wizard (first visit) */}
-      <OnboardingWizard />
+      {/* Onboarding disabled for client presentation */}
     </div>
   )
 }
@@ -318,8 +318,7 @@ function ContentRouter({ tab }: { tab: string }) {
       return <OfficePanel />
     case 'social':
       return <SocialMediaPanel />
-    case 'analytics':
-      return <AnalyticsPanel />
+
     case 'agent-monitor':
       return <AgentMonitorPanel />
 
@@ -327,6 +326,8 @@ function ContentRouter({ tab }: { tab: string }) {
       return <SecurityAuditPanel />
     case 'costs':
       return <CostTrackerPanel />
+    case 'daily':
+      return <DailySummaryPanel />
     case 'super-admin':
       return <SuperAdminPanel />
     case 'workspaces':

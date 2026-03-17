@@ -26,7 +26,13 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    log.error('Panel error:', error, errorInfo)
+    try {
+      log.error('Panel error:', error)
+      console.error('Panel error details:', error, errorInfo)
+    } catch (logError) {
+      // Fallback if logger fails
+      console.error('Panel error (logger failed):', error, logError)
+    }
   }
 
   render() {

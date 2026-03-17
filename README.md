@@ -547,3 +547,51 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 ## License
 
 [MIT](LICENSE) © 2026 [Builderz Labs](https://github.com/builderz-labs)
+
+## 🐟 Agent Simulation Features
+
+Mission Control now includes advanced multi-agent simulation capabilities powered by MiroFish:
+
+### Features
+- **GraphRAG Knowledge Extraction** - Build knowledge graphs from documents
+- **Agent Persona Generation** - Create realistic AI agents with personalities
+- **Multi-Platform Simulation** - Twitter + Reddit parallel execution  
+- **God's Eye View** - Real-time scenario injection and monitoring
+- **Interview System** - Mid-simulation agent questioning
+- **Enterprise Analytics** - Detailed simulation analytics and reports
+
+### Quick Start
+1. Install simulation dependencies:
+   ```bash
+   npm install
+   ```
+
+2. Deploy MiroFish backend:
+   ```bash
+   ./deploy-simulation.sh
+   ```
+
+3. Configure environment variables:
+   ```bash
+   cp .env.example .env
+   # Add your OpenAI and Zep API keys
+   ```
+
+4. Access simulation dashboard:
+   ```
+   http://localhost:3000/simulation
+   ```
+
+### Business Applications
+- **Financial Stress Testing** - Model market reactions ($50K-$250K value)
+- **Product Launch Simulation** - Predict customer adoption ($25K-$100K value)  
+- **Crisis Communication** - Test response strategies ($40K-$150K value)
+- **Policy Impact Modeling** - Government and regulatory analysis ($75K-$500K value)
+
+### API Endpoints
+- `GET /api/simulation?endpoint=/api/graph/list` - List knowledge graphs
+- `POST /api/simulation?endpoint=/api/simulation/create` - Create simulation
+- `GET /api/simulation?endpoint=/api/simulation/{id}/status` - Get status
+- `POST /api/simulation?endpoint=/api/simulation/{id}/inject` - Inject scenario
+
+For detailed service offerings and pricing, see: `../deploy-simulation-service/service-offering.md`

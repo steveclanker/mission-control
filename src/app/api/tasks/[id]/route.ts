@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger';
 import { validateBody, updateTaskSchema } from '@/lib/validation';
 import { resolveMentionRecipients } from '@/lib/mentions';
 import { normalizeTaskUpdateStatus } from '@/lib/task-status';
+import { notifyTaskCompleted, notifyTaskFailed } from '@/lib/notify';
 
 function formatTicketRef(prefix?: string | null, num?: number | null): string | undefined {
   if (!prefix || typeof num !== 'number' || !Number.isFinite(num) || num <= 0) return undefined
@@ -376,6 +377,13 @@ export async function PUT(
       WHERE t.id = ? AND t.workspace_id = ?
     `).get(taskId, workspaceId) as Task;
     const parsedTask = mapTaskRow(updatedTask);
+
+    // Push notifications for status changes
+    if (normalizedStatus !== undefined && normalizedStatus !== currentTask.status) {
+      const taskTitle = title || currentTask.title;
+      if (normalizedStatus === 'done') notifyTaskCompleted(taskTitle).catch(() => {});
+      else if (normalizedStatus === 'failed') notifyTaskFailed(taskTitle).catch(() => {});
+    }
 
     // Broadcast to SSE clients
     eventBus.broadcast('task.updated', parsedTask);

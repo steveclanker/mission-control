@@ -7,6 +7,7 @@ import { logger } from './logger'
 import { processWebhookRetries } from './webhooks'
 import { syncClaudeSessions } from './claude-sessions'
 import { pruneGatewaySessionsOlderThan } from './sessions'
+import { notifyAgentOffline, notifyStaleTask } from './notify'
 
 const BACKUP_DIR = join(dirname(config.dbPath), 'backups')
 
@@ -182,6 +183,9 @@ async function runHeartbeatCheck(): Promise<{ ok: boolean; message: string }> {
         logActivity.run(agent.id, `Agent "${agent.name}" marked offline (no heartbeat for ${timeoutMinutes}m)`)
         names.push(agent.name)
 
+        // Push notification
+        notifyAgentOffline(agent.name).catch(() => {})
+
         // Create notification for each stale agent
         try {
           db.prepare(`
@@ -208,6 +212,32 @@ async function runHeartbeatCheck(): Promise<{ ok: boolean; message: string }> {
   }
 }
 
+/** Check for tasks stuck in 'in_progress' for >4 hours and notify */
+async function runStaleTaskCheck(): Promise<{ ok: boolean; message: string }> {
+  try {
+    const db = getDatabase()
+    const now = Math.floor(Date.now() / 1000)
+    const fourHoursAgo = now - 4 * 60 * 60
+
+    const staleTasks = db.prepare(`
+      SELECT id, title FROM tasks
+      WHERE status = 'in_progress' AND updated_at < ?
+    `).all(fourHoursAgo) as Array<{ id: number; title: string }>
+
+    if (staleTasks.length === 0) {
+      return { ok: true, message: 'No stale tasks' }
+    }
+
+    for (const task of staleTasks) {
+      notifyStaleTask(task.title).catch(() => {})
+    }
+
+    return { ok: true, message: `Found ${staleTasks.length} stale task(s)` }
+  } catch (err: any) {
+    return { ok: false, message: `Stale task check failed: ${err.message}` }
+  }
+}
+
 const DAILY_MS = 24 * 60 * 60 * 1000
 const FIVE_MINUTES_MS = 5 * 60 * 1000
 const TICK_MS = 60 * 1000 // Check every minute
@@ -220,6 +250,13 @@ export function initScheduler() {
   syncAgentsFromConfig('startup').catch(err => {
     logger.warn({ err }, 'Agent auto-sync failed')
   })
+
+  // Auto-mark iris as online on server startup
+  try {
+    const db = getDatabase()
+    const now = Math.floor(Date.now() / 1000)
+    db.prepare(`UPDATE agents SET status = 'idle', last_seen = ?, updated_at = ? WHERE name = 'iris'`).run(now, now)
+  } catch { /* iris may not exist yet */ }
 
   // Register tasks
   const now = Date.now()
@@ -272,9 +309,18 @@ export function initScheduler() {
     running: false,
   })
 
+  tasks.set('stale_task_check', {
+    name: 'Stale Task Check',
+    intervalMs: 30 * 60 * 1000, // Every 30 minutes
+    lastRun: null,
+    nextRun: now + 10 * 60 * 1000, // First run 10 min after startup
+    enabled: true,
+    running: false,
+  })
+
   // Start the tick loop
   tickInterval = setInterval(tick, TICK_MS)
-  logger.info('Scheduler initialized - backup at ~3AM, cleanup at ~4AM, heartbeat every 5m, webhook retry every 60s, claude scan every 60s')
+  logger.info('Scheduler initialized - backup at ~3AM, cleanup at ~4AM, heartbeat every 5m, webhook retry every 60s, claude scan every 60s, stale task check every 30m')
 }
 
 /** Calculate ms until next occurrence of a given hour (UTC) */
@@ -300,8 +346,9 @@ async function tick() {
       : id === 'auto_cleanup' ? 'general.auto_cleanup'
       : id === 'webhook_retry' ? 'webhooks.retry_enabled'
       : id === 'claude_session_scan' ? 'general.claude_session_scan'
+      : id === 'stale_task_check' ? 'notifications.push_enabled'
       : 'general.agent_heartbeat'
-    const defaultEnabled = id === 'agent_heartbeat' || id === 'webhook_retry' || id === 'claude_session_scan'
+    const defaultEnabled = id === 'agent_heartbeat' || id === 'webhook_retry' || id === 'claude_session_scan' || id === 'stale_task_check'
     if (!isSettingEnabled(settingKey, defaultEnabled)) continue
 
     task.running = true
@@ -310,6 +357,7 @@ async function tick() {
         : id === 'agent_heartbeat' ? await runHeartbeatCheck()
         : id === 'webhook_retry' ? await processWebhookRetries()
         : id === 'claude_session_scan' ? await syncClaudeSessions()
+        : id === 'stale_task_check' ? await runStaleTaskCheck()
         : await runCleanup()
       task.lastResult = { ...result, timestamp: now }
     } catch (err: any) {
@@ -339,8 +387,9 @@ export function getSchedulerStatus() {
       : id === 'auto_cleanup' ? 'general.auto_cleanup'
       : id === 'webhook_retry' ? 'webhooks.retry_enabled'
       : id === 'claude_session_scan' ? 'general.claude_session_scan'
+      : id === 'stale_task_check' ? 'notifications.push_enabled'
       : 'general.agent_heartbeat'
-    const defaultEnabled = id === 'agent_heartbeat' || id === 'webhook_retry' || id === 'claude_session_scan'
+    const defaultEnabled = id === 'agent_heartbeat' || id === 'webhook_retry' || id === 'claude_session_scan' || id === 'stale_task_check'
     result.push({
       id,
       name: task.name,
@@ -362,6 +411,7 @@ export async function triggerTask(taskId: string): Promise<{ ok: boolean; messag
   if (taskId === 'agent_heartbeat') return runHeartbeatCheck()
   if (taskId === 'webhook_retry') return processWebhookRetries()
   if (taskId === 'claude_session_scan') return syncClaudeSessions()
+  if (taskId === 'stale_task_check') return runStaleTaskCheck()
   return { ok: false, message: `Unknown task: ${taskId}` }
 }
 

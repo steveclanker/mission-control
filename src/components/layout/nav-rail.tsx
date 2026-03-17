@@ -22,13 +22,13 @@ const navGroups: NavGroup[] = [
   {
     id: 'core',
     items: [
+      { id: 'daily', label: 'Daily', icon: <DailyIcon />, priority: true },
       { id: 'overview', label: 'Overview', icon: <OverviewIcon />, priority: true },
       { id: 'agents', label: 'Agents', icon: <AgentsIcon />, priority: true, requiresGateway: true },
       { id: 'tasks', label: 'Tasks', icon: <TasksIcon />, priority: true },
       { id: 'sessions', label: 'Sessions', icon: <SessionsIcon />, priority: false },
       { id: 'office', label: 'Office', icon: <OfficeIcon />, priority: false },
       { id: 'social', label: 'Social', icon: <SocialIcon />, priority: true },
-      { id: 'analytics', label: 'Analytics', icon: <AnalyticsIcon />, priority: true },
 
     ],
   },
@@ -78,7 +78,7 @@ const navGroups: NavGroup[] = [
 const allNavItems = navGroups.flatMap(g => g.items)
 
 // Nav items visible in client mode
-const clientVisibleIds = new Set(['overview', 'tasks', 'social', 'analytics'])
+const clientVisibleIds = new Set(['daily', 'overview', 'tasks', 'social', 'simulation', 'analytics'])
 
 export function NavRail() {
   const { activeTab, connection, dashboardMode, sidebarExpanded, collapsedGroups, toggleSidebar, toggleGroup, viewMode } = useMissionControl()
@@ -702,12 +702,15 @@ function SecurityIcon() {
   )
 }
 
-function AnalyticsIcon() {
+function DailyIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="10" width="3" height="4" rx="0.5" />
-      <rect x="6.5" y="6" width="3" height="8" rx="0.5" />
-      <rect x="11" y="2" width="3" height="12" rx="0.5" />
+      <circle cx="8" cy="8" r="4" />
+      <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.4 1.4M11.55 11.55l1.4 1.4M3.05 12.95l1.4-1.4M11.55 4.45l1.4-1.4" />
     </svg>
   )
 }
+
+
+
+

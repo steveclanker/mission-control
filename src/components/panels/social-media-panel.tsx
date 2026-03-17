@@ -16,7 +16,8 @@ type SortKey = 'publishedAt' | 'impressions' | 'reach' | 'likes' | 'comments' | 
 type SortDir = 'asc' | 'desc'
 
 // Formatters (outside component for stability)
-const formatNumber = (num: number): string => {
+const formatNumber = (num: number | undefined | null): string => {
+  if (!num || typeof num !== 'number' || isNaN(num)) return '0'
   if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M'
   if (num >= 1_000) return (num / 1_000).toFixed(1) + 'K'
   return num.toString()
@@ -73,8 +74,61 @@ export function SocialMediaPanel() {
       if (!accountsRes.ok || !analyticsRes.ok) throw new Error('Failed to fetch data from Late API')
       const accountsData = await accountsRes.json()
       const analyticsData = await analyticsRes.json()
-      setAccounts(accountsData.accounts || [])
-      setAnalytics(analyticsData)
+      
+      // Ensure accounts have proper structure with safe defaults
+      const normalizedAccounts = (accountsData.accounts || []).map((account: any) => ({
+        ...account,
+        followersCount: Number(account.followersCount ?? account.followers_count ?? 0) || 0,
+        username: account.username || account.handle || 'unknown',
+        displayName: account.displayName || account.display_name || account.name || account.username,
+        isActive: account.isActive ?? account.is_active ?? true,
+        platform: account.platform || 'unknown'
+      }))
+      
+      // Normalize analytics data with safe defaults - pull from analytics.analytics if exists
+      const analyticsRoot = analyticsData.analytics || analyticsData
+      const normalizedAnalytics = {
+        ...analyticsData,
+        // Map top_posts to posts for component compatibility  
+        posts: (analyticsRoot?.top_posts || analyticsData.posts || []).map((post: any) => ({
+          ...post,
+          analytics: {
+            likes: Number(post.analytics?.likes ?? 0) || 0,
+            comments: Number(post.analytics?.comments ?? 0) || 0,
+            shares: Number(post.analytics?.shares ?? 0) || 0,
+            saves: Number(post.analytics?.saves ?? 0) || 0,
+            reach: Number(post.analytics?.reach ?? 0) || 0,
+            impressions: Number(post.analytics?.impressions ?? 0) || 0,
+            engagementRate: Number(post.analytics?.engagement_rate ?? post.analytics?.engagementRate ?? 0) || 0,
+            ...(post.analytics || {})
+          },
+          // Add missing fields that the component expects
+          publishedAt: post.timestamp || post.publishedAt || new Date().toISOString(),
+          content: post.content || '',
+          platform: post.platform || 'instagram',
+          platformPostUrl: post.platformPostUrl || null,
+          thumbnailUrl: post.thumbnailUrl || null
+        })),
+        // Ensure top-level analytics data is available
+        total_posts: analyticsRoot?.total_posts || 0,
+        total_views: analyticsRoot?.total_views || 0,
+        total_engagement: analyticsRoot?.total_engagement || 0,
+        engagement_rate: analyticsRoot?.engagement_rate || 0,
+        // Add overview object for compatibility
+        overview: {
+          totalPosts: analyticsRoot?.total_posts || 0,
+          publishedPosts: analyticsRoot?.total_posts || 0,
+          scheduledPosts: 0
+        }
+      }
+      
+      console.log('📊 Analytics API response:', analyticsData)
+      console.log('👥 Accounts API response:', accountsData)
+      console.log('🔥 Normalized analytics:', normalizedAnalytics)
+      console.log('📱 Normalized accounts:', normalizedAccounts)
+      
+      setAccounts(normalizedAccounts)
+      setAnalytics(normalizedAnalytics)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
@@ -129,11 +183,15 @@ export function SocialMediaPanel() {
 
   // Computed stats
   const avgEngagementRate = useMemo(() => {
+    // Use API-level engagement rate if available, otherwise calculate from posts
+    if (analytics?.engagement_rate) return analytics.engagement_rate
     if (!analytics?.posts?.length) return 0
     return analytics.posts.reduce((s, p) => s + (p.analytics?.engagementRate || 0), 0) / analytics.posts.length
   }, [analytics])
 
   const totalImpressions = useMemo(() => {
+    // Use API-level total views if available, otherwise calculate from posts
+    if (analytics?.total_views) return analytics.total_views
     if (!analytics?.posts?.length) return 0
     return analytics.posts.reduce((s, p) => s + (p.analytics?.impressions || 0), 0)
   }, [analytics])
@@ -141,6 +199,13 @@ export function SocialMediaPanel() {
   const totalFollowers = useMemo(() => {
     return accounts.reduce((s, a) => s + (a.followersCount || 0), 0)
   }, [accounts])
+
+  const totalPosts = useMemo(() => {
+    // Use API-level total posts if available, otherwise calculate from posts
+    if (analytics?.total_posts) return analytics.total_posts
+    if (analytics?.overview?.totalPosts) return analytics.overview.totalPosts
+    return analytics?.posts?.length || 0
+  }, [analytics])
 
   const topPosts = useMemo(() => {
     if (!analytics?.posts?.length) return []
@@ -454,7 +519,7 @@ export function SocialMediaPanel() {
             {activeTab === 'overview' && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
-                  <StatCard label="Total Posts" value={String(analytics?.overview?.totalPosts || 0)} icon="📝" gradient="from-violet-500/20 to-purple-500/5" borderColor="border-violet-500/20" />
+                  <StatCard label="Total Posts" value={String(totalPosts)} icon="📝" gradient="from-violet-500/20 to-purple-500/5" borderColor="border-violet-500/20" />
                   <StatCard label="Followers" value={formatNumber(totalFollowers)} icon="👥" gradient="from-cyan-500/20 to-blue-500/5" borderColor="border-cyan-500/20" />
                   <StatCard label="Avg Engagement" value={`${avgEngagementRate.toFixed(2)}%`} icon="🔥" gradient="from-orange-500/20 to-red-500/5" borderColor="border-orange-500/20" />
                   <StatCard label="Impressions" value={formatNumber(totalImpressions)} icon="👁" gradient="from-emerald-500/20 to-teal-500/5" borderColor="border-emerald-500/20" />

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { ThemeProvider } from 'next-themes'
+import { Brain, ThemeProvider } from 'next-themes'
 import './globals.css'
 
 export const viewport: Viewport = {

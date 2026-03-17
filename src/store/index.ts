@@ -606,10 +606,7 @@ export const useMissionControl = create<MissionControlStore>()(
         return raw ? JSON.parse(raw) as string[] : []
       } catch { return [] as string[] }
     })(),
-    liveFeedOpen: (() => {
-      if (typeof window === 'undefined') return true
-      try { return localStorage.getItem('mc-livefeed-open') !== 'false' } catch { return true }
-    })(),
+    liveFeedOpen: false,
     setActiveTab: (tab) => set({ activeTab: tab }),
     toggleSidebar: () =>
       set((state) => {

@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { useMissionControl } from '@/store'
 import { useNavigateToPanel } from '@/lib/navigation'
 import { useSmartPoll } from '@/lib/use-smart-poll'
+import { LiveActivityFeed } from '@/components/panels/live-activity-feed'
 
 interface DbStats {
   tasks: { total: number; byStatus: Record<string, number> }
@@ -524,6 +525,11 @@ export function Dashboard() {
         ) : (
           <QuickAction label="Orchestration" desc="Workflows & pipelines" tab="agents" icon={<PipelineActionIcon />} onNavigate={navigateToPanel} />
         )}
+      </div>
+
+      {/* Live Activity Feed */}
+      <div className="mt-6">
+        <LiveActivityFeed />
       </div>
     </div>
   )

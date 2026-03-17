@@ -4,6 +4,7 @@ import { getDatabase, logAuditEvent } from '@/lib/db'
 import { config } from '@/lib/config'
 import { mutationLimiter } from '@/lib/rate-limit'
 import { validateBody, updateSettingsSchema } from '@/lib/validation'
+import { invalidateNotificationSettings } from '@/lib/notify'
 
 interface SettingRow {
   key: string
@@ -34,6 +35,16 @@ const settingDefinitions: Record<string, { category: string; description: string
   'general.auto_cleanup': { category: 'general', description: 'Enable automatic data cleanup', default: 'false' },
   'general.auto_backup': { category: 'general', description: 'Enable automatic daily backups', default: 'false' },
   'general.backup_retention_count': { category: 'general', description: 'Number of backup files to keep', default: '10' },
+
+  // Notifications (Telegram push)
+  'notifications.push_enabled': { category: 'notifications', description: 'Enable Telegram push notifications', default: 'true' },
+  'notifications.telegram_chat_id': { category: 'notifications', description: 'Telegram chat ID for notifications', default: '5329452013' },
+  'notifications.event_task_completed': { category: 'notifications', description: 'Notify when a task is completed', default: 'true' },
+  'notifications.event_task_failed': { category: 'notifications', description: 'Notify when a task fails', default: 'true' },
+  'notifications.event_task_created': { category: 'notifications', description: 'Notify when a new task is created', default: 'true' },
+  'notifications.event_agent_offline': { category: 'notifications', description: 'Notify when an agent goes offline', default: 'true' },
+  'notifications.event_agent_online': { category: 'notifications', description: 'Notify when an agent comes online', default: 'true' },
+  'notifications.event_stale_task': { category: 'notifications', description: 'Notify when a task is stuck for >4 hours', default: 'true' },
 }
 
 /**
@@ -141,6 +152,11 @@ export async function PUT(request: NextRequest) {
   })
 
   txn()
+
+  // Invalidate notification settings cache if any notification keys were changed
+  if (Object.keys(body.settings).some(k => k.startsWith('notifications.'))) {
+    invalidateNotificationSettings()
+  }
 
   // Audit log
   const ipAddress = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
