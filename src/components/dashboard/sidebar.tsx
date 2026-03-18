@@ -15,18 +15,11 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
-  { id: 'overview', label: 'Overview', icon: '📊', description: 'System dashboard' },
-  { id: 'sessions', label: 'Sessions', icon: '💬', description: 'Active agent sessions' },
-  { id: 'tasks', label: 'Task Board', icon: '📋', description: 'Kanban task management' },
-  { id: 'agents', label: 'Agent Squad', icon: '🤖', description: 'Agent management & status' },
-  { id: 'activity', label: 'Activity Feed', icon: '📣', description: 'Real-time activity stream' },
-  { id: 'notifications', label: 'Notifications', icon: '🔔', description: 'Mentions & alerts' },
-  { id: 'standup', label: 'Daily Standup', icon: '📈', description: 'Generate standup reports' },
-  { id: 'spawn', label: 'Spawn Agent', icon: '🚀', description: 'Launch new sub-agents' },
-  { id: 'logs', label: 'Logs', icon: '📝', description: 'Real-time log viewer' },
-  { id: 'cron', label: 'Cron Jobs', icon: '⏰', description: 'Automated tasks' },
-  { id: 'memory', label: 'Memory', icon: '🧠', description: 'Knowledge browser' },
-  { id: 'tokens', label: 'Tokens', icon: '💰', description: 'Usage & cost tracking' },
+  { id: 'overview', label: 'Overview', icon: '📊', description: 'Daily snapshot' },
+  { id: 'tasks', label: 'Tasks', icon: '📋', description: 'What Steve is working on' },
+  { id: 'activity', label: 'Activity', icon: '📣', description: 'Recent updates' },
+  { id: 'cron', label: 'Scheduled Jobs', icon: '⏰', description: 'Automated daily tasks' },
+  { id: 'social', label: 'Social', icon: '📱', description: 'Social media analytics' },
 ]
 
 export function Sidebar() {
@@ -51,11 +44,11 @@ export function Sidebar() {
       <div className="p-6 border-b border-border">
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">MC</span>
+            <span className="text-primary-foreground font-bold text-sm">LH</span>
           </div>
           <div>
-            <h2 className="font-bold text-foreground">Mission Control</h2>
-            <p className="text-xs text-muted-foreground">ClawdBot Orchestration</p>
+            <h2 className="font-bold text-foreground">La Haute</h2>
+            <p className="text-xs text-muted-foreground">Dashboard</p>
           </div>
         </div>
       </div>

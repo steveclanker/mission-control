@@ -35,6 +35,9 @@ import { GitHubSyncPanel } from '@/components/panels/github-sync-panel'
 import { SocialMediaPanel } from '@/components/panels/social-media-panel'
 
 import { DailySummaryPanel } from '@/components/panels/daily-summary-panel'
+import { LaHauteDailyPanel } from '@/components/panels/lahaute-daily-panel'
+import { LaHauteStockPanel } from '@/components/panels/lahaute-stock-panel'
+import { LaHauteOverviewPanel } from '@/components/panels/lahaute-overview-panel'
 
 import { AgentMonitorPanel } from '@/components/panels/agent-monitor-panel'
 import { SecurityAuditPanel } from '@/components/panels/security-audit-panel'
@@ -247,19 +250,7 @@ function ContentRouter({ tab }: { tab: string }) {
 
   switch (tab) {
     case 'overview':
-      if (isClient) {
-        return <ClientDashboard />
-      }
-      return (
-        <>
-          <Dashboard />
-          {!isLocal && (
-            <div className="hidden md:block mt-4 mx-4 mb-4 rounded-xl border border-border bg-card overflow-hidden">
-              <AgentCommsPanel />
-            </div>
-          )}
-        </>
-      )
+      return <LaHauteOverviewPanel />
     case 'tasks':
       return <TaskBoardPanel />
     case 'agents':
@@ -326,8 +317,10 @@ function ContentRouter({ tab }: { tab: string }) {
       return <SecurityAuditPanel />
     case 'costs':
       return <CostTrackerPanel />
+    case 'stock':
+      return <LaHauteStockPanel />
     case 'daily':
-      return <DailySummaryPanel />
+      return <LaHauteDailyPanel />
     case 'super-admin':
       return <SuperAdminPanel />
     case 'workspaces':
